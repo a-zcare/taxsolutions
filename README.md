@@ -13,6 +13,7 @@ V2 adds a staff workspace at `/workspace`: Owner/Admin/Accountant roles, mandato
 - [Security boundaries, retention and privacy acceptance](docs/v2/SECURITY-OPERATIONS.md)
 - [Video account requirements and activation](docs/v2/VIDEO-PROVIDERS.md)
 - [Validation record and pending acceptance](docs/v2/VALIDATION.md)
+- [VPS capacity and operating budget](docs/v2/COSTS.md)
 
 ## Local development
 

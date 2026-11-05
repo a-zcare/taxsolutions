@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { fillTestMfa } from './auth-helper';
+import { totp } from '../../src/lib/v2/crypto';
 test('workspace authentication, CSRF, private data and mobile navigation', async ({
   page,
   request,
@@ -45,6 +46,63 @@ test('workspace authentication, CSRF, private data and mobile navigation', async
       })
     ).status(),
   ).toBe(403);
+  const invited = await page.request.post('/api/workspace', {
+    headers: { origin: 'http://localhost:3000' },
+    data: {
+      action: 'inviteStaff',
+      data: {
+        email: `enrollment-${Date.now()}@example.invalid`,
+        name: 'Synthetic Enrollment',
+        role: 'ACCOUNTANT',
+        locale: 'en',
+      },
+    },
+  });
+  expect(invited.status()).toBe(200);
+  const invitation = await invited.json();
+  const token = new URL(invitation.enrollmentUrl).searchParams.get('token');
+  const provisioning = await request.get(`/api/enroll?token=${token}`);
+  expect(provisioning.headers()['cache-control']).toContain('no-store');
+  const { secret } = await provisioning.json();
+  const enrollment = {
+    token,
+    password: 'synthetic-enrollment-password-only',
+    code: totp(secret),
+  };
+  expect(
+    (
+      await request.post('/api/enroll', {
+        headers: { origin: 'http://localhost:3000' },
+        data: enrollment,
+      })
+    ).status(),
+  ).toBe(200);
+  expect(
+    (
+      await request.post('/api/enroll', {
+        headers: { origin: 'http://localhost:3000' },
+        data: enrollment,
+      })
+    ).status(),
+  ).toBe(404);
+  const disabled = await page.request.post('/api/workspace', {
+    headers: { origin: 'http://localhost:3000' },
+    data: {
+      action: 'staff',
+      data: {
+        id: invitation.id,
+        name: 'Synthetic Enrollment',
+        role: 'ACCOUNTANT',
+        active: false,
+        acceptsBookings: false,
+        specializations: [],
+        capacityMinutes: 2400,
+        schedule: null,
+        locale: 'en',
+      },
+    },
+  });
+  expect(disabled.status()).toBe(200);
   await page.setViewportSize({ width: 375, height: 812 });
   expect(
     await page.evaluate(

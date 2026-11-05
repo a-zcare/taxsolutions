@@ -58,6 +58,7 @@ jobs:
       - run: npm run test:platform
       - run: npm run test:migrations
       - run: npm run build
+      - run: npm run build:worker && node --import tsx tests/worker-runtime.ts
       - name: Use preinstalled Chrome
         run: google-chrome --version
       - run: npm run test:e2e
