@@ -37,7 +37,20 @@ export function slotsForDay(
     const start = fromZonedTime(local, ZONE);
     const end = new Date(start.getTime() + duration * 60000);
     if (start.getTime() < now.getTime() + rules.leadHours * 3600000) continue;
-    if (busy.some((b) => start < b.end && end > b.start)) continue;
+    const blockedStart = new Date(
+        start.getTime() - (rules.bufferMinutes ?? 0) * 60000,
+      ),
+      blockedEnd = new Date(end.getTime() + (rules.bufferMinutes ?? 0) * 60000);
+    if (
+      (rules.breaks ?? []).some(
+        (b) =>
+          blockedStart < fromZonedTime(`${date}T${b.end}:00`, ZONE) &&
+          blockedEnd > fromZonedTime(`${date}T${b.start}:00`, ZONE),
+      )
+    )
+      continue;
+    if (busy.some((b) => blockedStart < b.end && blockedEnd > b.start))
+      continue;
     out.push(start.toISOString());
   }
   return out;

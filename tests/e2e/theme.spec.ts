@@ -1,3 +1,4 @@
+import { fillTestMfa } from './auth-helper';
 import { test, expect } from '@playwright/test';
 import { themeTests } from '../theme-browser';
 themeTests();
@@ -49,6 +50,7 @@ test('admin login and management honor dark appearance', async ({ page }) => {
   await page
     .getByLabel('Password', { exact: true })
     .fill(process.env.TEST_ADMIN_PASSWORD!);
+  await fillTestMfa(page);
   await page.getByRole('button', { name: 'Sign in →' }).click();
   await expect(
     page.getByRole('heading', { name: 'Business overview' }),

@@ -28,6 +28,22 @@ model Booking {
  tokenHash String @unique
  createdAt DateTime @default(now())
  consentAt DateTime @default(now())
+ staffId String?
+ staff Staff? @relation(fields:[staffId],references:[id],onDelete:SetNull)
+ clientId String?
+ client Client? @relation(fields:[clientId],references:[id],onDelete:SetNull)
+ resourceId String @default("default")
+ format String @default("IN_PERSON")
+ bufferMinutes Int @default(0)
+ blockedStart DateTime @default(dbgenerated()) @db.Timestamptz(3)
+ blockedEnd DateTime @default(dbgenerated()) @db.Timestamptz(3)
+ version Int @default(1)
+ reminderSentAt DateTime?
+ pendingSince DateTime @default(now())
+ manageTokenCiphertext String?
+ tasks Task[]
+ meeting VideoMeeting?
+ videoJobs VideoJob[]
 }
 model Setting {
  key String @id
@@ -42,9 +58,187 @@ model Outbox {
  nextAttempt DateTime @default(now())
  sentAt DateTime?
  createdAt DateTime @default(now())
+ failedAt DateTime?
+ dedupKey String? @unique
 }
 model RateLimit {
  key String @id
  count Int
  expiresAt DateTime
+}
+
+enum StaffRole {
+ OWNER
+ ADMIN
+ ACCOUNTANT
+}
+model Staff {
+ id String @id @default(uuid())
+ email String @unique
+ name String
+ role StaffRole @default(ACCOUNTANT)
+ active Boolean @default(true)
+ acceptsBookings Boolean @default(false)
+ passwordHash String
+ totpCiphertext String
+ lastTotpCounter BigInt @default(-1)
+ enrolTokenHash String? @unique
+ enrolExpiresAt DateTime?
+ capacityMinutes Int @default(2400)
+ specializations String[] @default(["general"])
+ schedule Json?
+ locale String @default("lv")
+ createdAt DateTime @default(now())
+ sessions StaffSession[]
+ bookings Booking[]
+ clients Client[]
+ tasks Task[] @relation("AssignedTasks")
+ createdTasks Task[] @relation("CreatedTasks")
+ comments TaskComment[]
+ audit AuditEvent[]
+ oauth OAuthConnection[]
+ oauthFlows OAuthFlow[]
+ inquiries Inquiry[]
+}
+model StaffSession {
+ id String @id
+ staffId String
+ staff Staff @relation(fields:[staffId],references:[id],onDelete:Cascade)
+ expiresAt DateTime
+ createdAt DateTime @default(now())
+ @@index([expiresAt])
+}
+model AuditEvent {
+ id String @id @default(uuid())
+ actorId String?
+ actor Staff? @relation(fields:[actorId],references:[id],onDelete:SetNull)
+ actorRole String
+ action String
+ objectType String
+ objectId String
+ fields String[] @default([])
+ createdAt DateTime @default(now())
+ @@index([createdAt])
+}
+model Client {
+ id String @id @default(uuid())
+ name String
+ email String @unique
+ phone String
+ locale String @default("lv")
+ status String @default("NEW")
+ ownerId String?
+ owner Staff? @relation(fields:[ownerId],references:[id],onDelete:SetNull)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ bookings Booking[]
+ tasks Task[]
+ @@index([ownerId,status])
+}
+model Task {
+ id String @id @default(uuid())
+ title String
+ description String @default("")
+ status String @default("TODO")
+ priority String @default("NORMAL")
+ category String @default("general")
+ estimatedMinutes Int @default(60)
+ dueAt DateTime @db.Timestamptz(3)
+ hardDeadline Boolean @default(true)
+ recurrence String @default("NONE")
+ recurrenceParentId String? @unique
+ recurrenceSpawnedAt DateTime?
+ reminderSentAt DateTime?
+ overdueSentAt DateTime?
+ assignedId String?
+ assigned Staff? @relation("AssignedTasks",fields:[assignedId],references:[id],onDelete:SetNull)
+ createdById String?
+ createdBy Staff? @relation("CreatedTasks",fields:[createdById],references:[id],onDelete:SetNull)
+ clientId String?
+ client Client? @relation(fields:[clientId],references:[id],onDelete:SetNull)
+ bookingId String?
+ booking Booking? @relation(fields:[bookingId],references:[id],onDelete:SetNull)
+ comments TaskComment[]
+ version Int @default(1)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([assignedId,status,dueAt])
+}
+model TaskComment {
+ id String @id @default(uuid())
+ taskId String
+ task Task @relation(fields:[taskId],references:[id],onDelete:Cascade)
+ authorId String?
+ author Staff? @relation(fields:[authorId],references:[id],onDelete:SetNull)
+ body String
+ createdAt DateTime @default(now())
+}
+model FaqEntry {
+ id String @id @default(uuid())
+ category String @default("general")
+ translations Json
+ approved Boolean @default(false)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model OAuthConnection {
+ id String @id @default(uuid())
+ staffId String
+ staff Staff @relation(fields:[staffId],references:[id],onDelete:Cascade)
+ provider String
+ tokenCiphertext String
+ enabled Boolean @default(true)
+ updatedAt DateTime @updatedAt
+ @@unique([staffId,provider])
+}
+model OAuthFlow {
+ id String @id
+ staffId String
+ staff Staff @relation(fields:[staffId],references:[id],onDelete:Cascade)
+ sessionHash String
+ browserHash String
+ provider String
+ verifierCiphertext String
+ expiresAt DateTime
+}
+model VideoMeeting {
+ id String @id @default(uuid())
+ bookingId String @unique
+ booking Booking @relation(fields:[bookingId],references:[id],onDelete:Cascade)
+ provider String
+ externalId String?
+ joinUrlCiphertext String?
+ version Int @default(1)
+ status String @default("QUEUED")
+ updatedAt DateTime @updatedAt
+}
+model VideoJob {
+ id String @id @default(uuid())
+ bookingId String
+ booking Booking @relation(fields:[bookingId],references:[id],onDelete:Cascade)
+ version Int
+ action String
+ provider String
+ status String @default("QUEUED")
+ attempts Int @default(0)
+ nextAttempt DateTime @default(now())
+ leaseUntil DateTime?
+ externalAttemptAt DateTime?
+ errorCode String?
+ createdAt DateTime @default(now())
+ @@unique([bookingId,version,action])
+ @@index([status,nextAttempt])
+}
+
+model Inquiry {
+ id String @id @default(uuid())
+ name String
+ email String
+ message String
+ locale String
+ status String @default("NEW")
+ assignedId String?
+ assigned Staff? @relation(fields:[assignedId],references:[id],onDelete:SetNull)
+ createdAt DateTime @default(now())
+ @@index([assignedId,status])
 }

@@ -1684,3 +1684,223 @@ textarea::placeholder {
 .success-box {
   overflow-wrap: anywhere;
 }
+.workspace-shell {
+  max-width: 1420px;
+  margin: auto;
+  padding: 25px 40px 80px;
+}
+.workspace-shell h1 {
+  font-size: 40px;
+}
+.workspace-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+.workspace-metrics strong {
+  font-size: 40px;
+  color: var(--navy);
+}
+.workspace-toolbar,
+.workspace-actions {
+  display: flex;
+  gap: 14px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.workspace-toolbar {
+  margin: 25px 0;
+}
+.workspace-toolbar label {
+  min-width: 150px;
+  flex: 1;
+}
+.workspace-actions .button {
+  margin-top: 0;
+}
+.workspace-actions select {
+  width: auto;
+}
+.workspace-actions form {
+  min-width: 180px;
+}
+.workspace-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.workspace-task-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.workspace-task {
+  border: 1px solid var(--line);
+  background: var(--card);
+  padding: 20px;
+  border-radius: 10px;
+  min-width: 0;
+  margin: 15px 0;
+}
+.workspace-task p {
+  font-size: 13px;
+  margin: 10px 0;
+}
+.workspace-task-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+.workspace-task-top strong {
+  overflow-wrap: anywhere;
+}
+.priority {
+  font-size: 10px;
+  padding: 4px 8px;
+  background: var(--pale);
+  color: var(--navy);
+  border-radius: 5px;
+}
+.priority-HIGH,
+.priority-URGENT {
+  color: var(--error);
+}
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.kanban > section {
+  padding: 15px;
+  background: var(--pale);
+  border-radius: 12px;
+}
+.kanban h2 {
+  font-size: 20px;
+}
+.workspace-editor {
+  margin-top: 30px;
+  border-color: var(--blue);
+}
+.workspace-editor form {
+  margin-top: 20px;
+}
+.workspace-records {
+  display: grid;
+  gap: 16px;
+}
+.workspace-records .admin-card {
+  margin-bottom: 0;
+}
+.task-comments {
+  padding: 0;
+  list-style: none;
+}
+.task-comments li {
+  white-space: pre-wrap;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+  font-size: 13px;
+}
+.task-comments small {
+  display: block;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.planner-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  margin: 30px 0;
+}
+.planner-calendar > strong {
+  font-size: 12px;
+  text-align: center;
+}
+.planner-calendar button {
+  padding: 15px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--pale);
+  color: var(--navy);
+  min-height: 65px;
+}
+.planner-calendar button.selected {
+  background: var(--blue);
+  color: var(--on-primary);
+}
+.planner-calendar small {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+}
+.faq-search {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+.faq-results {
+  font-size: 12px;
+}
+.form-hint {
+  font-size: 11px;
+  margin: 15px 0;
+}
+.enrollment-secret {
+  display: block;
+  overflow-wrap: anywhere;
+  background: var(--pale);
+  padding: 20px;
+  margin: 20px 0;
+  color: var(--navy);
+}
+.plain-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.manage-reschedule {
+  margin-top: 30px;
+}
+.manage-reschedule .time-slots {
+  margin-top: 20px;
+}
+summary {
+  min-height: 24px;
+}
+@media (max-width: 760px) {
+  .workspace-shell {
+    padding: 20px 15px 60px;
+  }
+  .workspace-shell h1 {
+    font-size: 32px;
+  }
+  .workspace-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .workspace-metrics .admin-card {
+    padding: 18px;
+  }
+  .workspace-task-list,
+  .kanban {
+    grid-template-columns: 1fr;
+  }
+  .workspace-task-top {
+    flex-wrap: wrap;
+  }
+  .workspace-actions {
+    align-items: start;
+  }
+  .planner-calendar {
+    gap: 4px;
+  }
+  .planner-calendar button {
+    padding: 9px 3px;
+    min-height: 50px;
+  }
+  .faq-search {
+    grid-template-columns: 1fr;
+  }
+}

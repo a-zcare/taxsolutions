@@ -1,0 +1,112 @@
+x-runtime: &runtime
+  image: ${APP_IMAGE:-taxsolutions:v2}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+    target: runtime
+  env_file: ${ENV_FILE:-../.env.production}
+  environment:
+    APP_ENV: production
+    TRUST_PROXY: 'true'
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ['no-new-privileges:true']
+  pids_limit: 192
+  networks: [private, egress]
+  depends_on:
+    db:
+      condition: service_healthy
+services:
+  db:
+    image: postgres:17-alpine
+    command: [postgres, -c, log_statement=none, -c, log_min_error_statement=panic, -c, log_error_verbosity=terse, -c, log_parameter_max_length_on_error=0]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: taxsolutions
+      POSTGRES_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?Set DB_APP_PASSWORD}
+      DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:?Set DB_MIGRATION_PASSWORD}
+      DB_BACKUP_PASSWORD: ${DB_BACKUP_PASSWORD:?Set DB_BACKUP_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    networks: [private]
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d taxsolutions']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    # No published port, including loopback.
+  app:
+    <<: *runtime
+    volumes:
+      - next_cache:/app/.next/cache
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+  worker:
+    <<: *runtime
+    command: ['node', 'dist/worker.mjs']
+  migrate:
+    profiles: [ops]
+    image: ${APP_IMAGE:-taxsolutions:v2}-migrator
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: build
+    env_file: ${ENV_FILE:-../.env.production}
+    environment:
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set MIGRATION_DATABASE_URL}
+      MIGRATION_APPROVED: ${MIGRATION_APPROVED:-false}
+    volumes: [ops_state:/ops-state:ro]
+    command: ['node', '--import', 'tsx', 'scripts/ops/migrate.ts']
+    networks: [private]
+    depends_on:
+      db:
+        condition: service_healthy
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports: ['80:80', '443:443', '443:443/udp']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [private, egress]
+    restart: unless-stopped
+    depends_on: [app]
+  backup:
+    profiles: [ops]
+    build:
+      context: ..
+      dockerfile: deploy/backup.Dockerfile
+    env_file: ${ENV_FILE:-../.env.production}
+    environment:
+      PGHOST: db
+      PGUSER: tax_backup
+      PGDATABASE: taxsolutions
+      PGPASSWORD: ${DB_BACKUP_PASSWORD:?Set DB_BACKUP_PASSWORD}
+    volumes:
+      - ops_state:/ops-state
+      - ${BACKUP_SSH_DIR:-./backup-ssh}:/root/.ssh:ro
+    networks: [private, egress]
+    depends_on:
+      db:
+        condition: service_healthy
+networks:
+  private:
+    internal: true
+  egress: {}
+volumes:
+  pgdata: {}
+  next_cache: {}
+  ops_state: {}
+  caddy_data: {}
+  caddy_config: {}

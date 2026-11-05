@@ -1,7 +1,11 @@
 'use client';
 import { useState } from 'react';
 import { useAdminLanguage } from './AdminLanguage';
-import { defaultContacts, type Schedule } from '@/lib/defaults';
+import {
+  defaultContacts,
+  defaultSchedule,
+  type Schedule,
+} from '@/lib/defaults';
 import type { Copy } from '@/lib/i18n';
 type SaveProps = {
   pending: boolean;
@@ -13,7 +17,7 @@ export function ScheduleEditor({
   onSave,
 }: SaveProps & { value: Schedule }) {
   const { t, locale } = useAdminLanguage();
-  const [rules, setRules] = useState(value),
+  const [rules, setRules] = useState({ ...defaultSchedule, ...value }),
     [closed, setClosed] = useState(''),
     [open, setOpen] = useState('');
   const update = (key: keyof Schedule, value: unknown) =>
@@ -76,6 +80,79 @@ export function ScheduleEditor({
           />
         </label>
       </div>
+      <label>
+        {t('Buffer minutes')}
+        <input
+          type="number"
+          min={0}
+          max={120}
+          value={rules.bufferMinutes}
+          onChange={(e) => update('bufferMinutes', Number(e.target.value))}
+        />
+      </label>
+      <fieldset className="admin-fieldset">
+        <legend>{t('Daily breaks')}</legend>
+        {rules.breaks.map((b, i) => (
+          <div className="form-grid" key={i}>
+            <label>
+              {t('Break start')}
+              <input
+                type="time"
+                value={b.start}
+                required
+                onChange={(e) =>
+                  update(
+                    'breaks',
+                    rules.breaks.map((v, j) =>
+                      j === i ? { ...v, start: e.target.value } : v,
+                    ),
+                  )
+                }
+              />
+            </label>
+            <label>
+              {t('Break end')}
+              <input
+                type="time"
+                value={b.end}
+                required
+                onChange={(e) =>
+                  update(
+                    'breaks',
+                    rules.breaks.map((v, j) =>
+                      j === i ? { ...v, end: e.target.value } : v,
+                    ),
+                  )
+                }
+              />
+            </label>
+            <button
+              type="button"
+              className="button secondary small"
+              onClick={() =>
+                update(
+                  'breaks',
+                  rules.breaks.filter((_, j) => j !== i),
+                )
+              }
+            >
+              {t('Remove')}
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="button secondary small"
+          onClick={() =>
+            update('breaks', [
+              ...rules.breaks,
+              { start: '12:00', end: '13:00' },
+            ])
+          }
+        >
+          {t('Add break')}
+        </button>
+      </fieldset>
       <fieldset className="admin-fieldset">
         <legend>{t('Working days')}</legend>
         <div className="weekday-options">

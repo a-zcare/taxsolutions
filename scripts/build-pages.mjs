@@ -26,6 +26,8 @@ for (const file of [
   'src/components/ThemeToggle.tsx',
   'src/components/ThemeScript.tsx',
   'src/lib/theme.ts',
+  'src/components/FaqSearch.tsx',
+  'src/lib/v2/ui.ts',
   'public',
   'postcss.config.mjs',
 ])
@@ -74,6 +76,10 @@ await put(
 await put(
   'src/lib/demo.ts',
   `export const demo={lv:{title:'Statiskā demonstrācijas versija',text:'Šajā GitHub Pages versijā pieraksts, pieejamības kalendārs, ziņu nosūtīšana un administrēšana nav pieejami. Veidlapu dati netiek vākti vai nosūtīti. Pilnā sistēma ar PostgreSQL un SMTP ir saglabāta projektā un tai nepieciešams atsevišķs serveris.',back:'Atgriezties'},en:{title:'Static demonstration website',text:'Appointment booking, live availability, sending messages and administration are unavailable on GitHub Pages. No form data is collected or sent. The full PostgreSQL and SMTP application remains in the project and requires a separate server.',back:'Go back'},ru:{title:'Статическая демонстрационная версия',text:'На GitHub Pages недоступны бронирование, календарь свободного времени, отправка сообщений и администрирование. Данные форм не собираются и не отправляются. Полная система с PostgreSQL и SMTP сохранена в проекте и требует отдельного сервера.',back:'Вернуться'}};\n`,
+);
+await put(
+  'src/lib/v2/faq.ts',
+  `import type {Copy,Locale} from '../i18n';export type FaqItem={id:string;category:string;question:string;answer:string};export async function approvedFaq(locale:Locale,c:Copy):Promise<FaqItem[]>{return c.faq.map(([question,answer],i)=>({id:String(i),category:'general',question,answer}))}`,
 );
 const notice = `import {demo} from '@/lib/demo';import type {Locale} from '@/lib/i18n';export default function Notice({locale}:{locale:Locale;[key:string]:unknown}){const d=demo[locale];return <aside className="success-box demo-notice"><h3>{d.title}</h3><p>{d.text}</p></aside>}`;
 await put('src/components/BookingForm.tsx', notice);

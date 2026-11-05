@@ -2,6 +2,7 @@
 import Calendar from './Calendar';
 import { googleCalendarLink } from '@/lib/calendar-export';
 import { useEffect, useState } from 'react';
+import { workspaceLabel } from '@/lib/v2/ui';
 import type { Copy, Locale } from '@/lib/i18n';
 import type { Translations } from '@/lib/defaults';
 type Service = { id: string; translations: Translations; duration: number };
@@ -14,6 +15,17 @@ export default function BookingForm({
   c: Copy;
   locale: Locale;
 }) {
+  const [staffId, setStaff] = useState(''),
+    [staff, setStaffList] = useState<{ id: string; name: string }[]>([]),
+    [format, setFormat] = useState('IN_PERSON');
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/staff', { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setStaffList)
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
   const [serviceId, setService] = useState(services[0]?.id ?? '');
   const [date, setDate] = useState('');
   const [slots, setSlots] = useState<string[]>([]);
@@ -31,9 +43,12 @@ export default function BookingForm({
     setLoading(true);
     setError('');
     const controller = new AbortController();
-    fetch(`/api/availability?date=${date}&serviceId=${serviceId}`, {
-      signal: controller.signal,
-    })
+    fetch(
+      `/api/availability?date=${date}&serviceId=${serviceId}${staffId ? `&staffId=${staffId}` : ''}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (r) => {
         if (!r.ok) throw Error();
         return r.json();
@@ -46,7 +61,7 @@ export default function BookingForm({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [date, serviceId, c.error, version]);
+  }, [date, serviceId, staffId, c.error, version]);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPending(true);
@@ -54,6 +69,8 @@ export default function BookingForm({
     const f = new FormData(e.currentTarget);
     const payload = {
       serviceId,
+      staffId: staffId || undefined,
+      format,
       start,
       locale,
       name: f.get('name'),
@@ -129,6 +146,48 @@ export default function BookingForm({
     );
   return (
     <form onSubmit={submit} className="booking-form">
+      <div className="form-grid">
+        <label>
+          {locale === 'lv'
+            ? 'Grāmatvedis'
+            : locale === 'ru'
+              ? 'Специалист'
+              : 'Accountant'}
+          <select
+            value={staffId}
+            onChange={(e) => {
+              setStaff(e.target.value);
+              if (!e.target.value) setFormat('IN_PERSON');
+            }}
+          >
+            <option value="">TaxSolutions</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {locale === 'lv'
+            ? 'Konsultācijas formāts'
+            : locale === 'ru'
+              ? 'Формат консультации'
+              : 'Consultation format'}
+          <select value={format} onChange={(e) => setFormat(e.target.value)}>
+            <option value="IN_PERSON">
+              {workspaceLabel('IN_PERSON', locale)}
+            </option>
+            <option value="ONLINE" disabled={!staffId}>
+              {workspaceLabel('ONLINE', locale)}
+            </option>
+          </select>
+        </label>
+      </div>
+      <p className="form-hint">
+        {workspaceLabel('No financial documents or passport details.', locale)}
+      </p>
+
       <div className="form-step">
         <span className="step-number">01</span>
         <label>
@@ -155,6 +214,7 @@ export default function BookingForm({
               value={date}
               onChange={setDate}
               serviceId={serviceId}
+              staffId={staffId || undefined}
               locale={locale}
               c={c}
               version={version}

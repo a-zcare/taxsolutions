@@ -17,7 +17,11 @@
     "build:pages": "node scripts/build-pages.mjs",
     "test:pages": "node scripts/test-pages.mjs",
     "lint": "eslint .",
-    "test:pages:e2e": "playwright test --config=playwright.pages.config.ts"
+    "test:pages:e2e": "playwright test --config=playwright.pages.config.ts",
+    "build:worker": "node scripts/build-worker.mjs",
+    "owner:bootstrap": "node --env-file-if-exists=.env --import tsx scripts/bootstrap-owner.ts",
+    "test:platform": "node --env-file-if-exists=.env --import tsx tests/platform-integration.ts",
+    "test:migrations": "node --env-file-if-exists=.env --import tsx tests/migrations.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",
@@ -44,6 +48,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@typescript/native": "npm:typescript@7.0.2",
+    "esbuild": "0.28.2",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.5",
     "prettier": "3.9.10",

@@ -5,6 +5,7 @@ export default function Calendar({
   value,
   onChange,
   serviceId,
+  staffId,
   locale,
   c,
   version,
@@ -12,6 +13,7 @@ export default function Calendar({
   value: string;
   onChange: (date: string) => void;
   serviceId: string;
+  staffId?: string;
   locale: Locale;
   c: Copy;
   version: number;
@@ -37,9 +39,12 @@ export default function Calendar({
     setError(false);
     setAvailable([]);
     const controller = new AbortController();
-    fetch(`/api/calendar?month=${month}&serviceId=${serviceId}`, {
-      signal: controller.signal,
-    })
+    fetch(
+      `/api/calendar?month=${month}&serviceId=${serviceId}${staffId ? `&staffId=${staffId}` : ''}`,
+      {
+        signal: controller.signal,
+      },
+    )
       .then(async (r) => {
         if (!r.ok) throw Error();
         return r.json();
@@ -55,7 +60,7 @@ export default function Calendar({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [month, serviceId, version]);
+  }, [month, serviceId, staffId, version]);
   const first = new Date(`${month}-01T12:00:00Z`);
   const length = new Date(
     first.getUTCFullYear(),

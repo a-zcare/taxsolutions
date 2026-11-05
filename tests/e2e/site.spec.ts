@@ -1,3 +1,4 @@
+import { fillTestMfa } from './auth-helper';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 test('all languages, legal pages, metadata and language switching', async ({
@@ -87,6 +88,7 @@ test('admin API authorization and sign in', async ({ page, request }) => {
   await page
     .getByLabel('Password', { exact: true })
     .fill(process.env.TEST_ADMIN_PASSWORD ?? '');
+  await fillTestMfa(page);
   await page.getByRole('button', { name: 'Sign in →' }).click();
   await expect(
     page.getByRole('heading', { name: 'Business overview' }),
@@ -134,6 +136,7 @@ test('admin edits prices, holidays, contacts and localized content', async ({
   await page
     .getByLabel('Password', { exact: true })
     .fill(process.env.TEST_ADMIN_PASSWORD!);
+  await fillTestMfa(page);
   await page.getByRole('button', { name: 'Sign in →' }).click();
   await expect(
     page.getByRole('heading', { name: 'Business overview' }),

@@ -1,3 +1,6 @@
+// E2E fixtures never target the developer/production application database.
+if (process.env.TEST_DATABASE_URL)
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: 'tests/e2e',

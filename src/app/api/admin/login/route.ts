@@ -1,29 +1,23 @@
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
-import { sameOrigin, rateLimit, loginSession, safeEqual } from '@/lib/security';
+import { sameOrigin, rateLimit, loginSession } from '@/lib/security';
+import { authenticate } from '@/lib/v2/auth';
 import { failure, json } from '@/lib/http';
 import { z } from 'zod';
 export async function POST(req: Request) {
   try {
     await sameOrigin();
-    await rateLimit('admin-login', 8);
+    await rateLimit('admin-login', 12);
     const v = z
-      .object({ email: z.email(), password: z.string().min(1).max(200) })
+      .object({
+        email: z.email().max(254),
+        password: z.string().min(1).max(200),
+        code: z.string().regex(/^\d{6}$/),
+      })
       .parse(await json(req));
-    const hash = process.env.ADMIN_PASSWORD_HASH_B64
-      ? Buffer.from(process.env.ADMIN_PASSWORD_HASH_B64, 'base64').toString(
-          'utf8',
-        )
-      : undefined;
-    if (!hash || !process.env.ADMIN_EMAIL) throw new Error('UNAUTHORIZED');
-    const valid = await bcrypt.compare(v.password, hash);
-    if (
-      !valid ||
-      !safeEqual(v.email.toLowerCase(), process.env.ADMIN_EMAIL.toLowerCase())
-    )
-      throw new Error('UNAUTHORIZED');
-    await loginSession();
-    return NextResponse.json({ ok: true });
+    await rateLimit('admin-login-account', 8, v.email.toLowerCase());
+    const user = await authenticate(v.email, v.password, v.code);
+    await loginSession(user.id);
+    return NextResponse.json({ ok: true, role: user.role });
   } catch (e) {
     return failure(e);
   }

@@ -1,38 +1,42 @@
 import { db } from './db';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { SignJWT, jwtVerify } from 'jose';
 import { cookies, headers } from 'next/headers';
 export const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 export const token = () => randomBytes(32).toString('hex');
-function key() {
-  const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 32 || s.startsWith('replace-'))
-    throw new Error('SESSION_SECRET must contain at least 32 characters');
-  return new TextEncoder().encode(s);
+export async function actor() {
+  const raw = (await cookies()).get('tax-session')?.value;
+  if (!raw || !/^[a-f0-9]{64}$/.test(raw)) return null;
+  const row = await db.staffSession.findUnique({
+    where: { id: hash(raw) },
+    include: {
+      staff: {
+        select: {
+          id: true,
+          role: true,
+          email: true,
+          name: true,
+          locale: true,
+          active: true,
+        },
+      },
+    },
+  });
+  if (!row || row.expiresAt < new Date() || !row.staff.active) return null;
+  return row.staff;
 }
 export async function session() {
-  const raw = (await cookies()).get('tax-session')?.value;
-  if (!raw) return false;
-  try {
-    const { payload } = await jwtVerify(raw, key(), {
-      issuer: 'taxsolutions',
-      audience: 'admin',
-    });
-    return payload.sub === 'admin';
-  } catch {
-    return false;
-  }
+  return Boolean(await actor());
 }
-export async function loginSession() {
-  const value = await new SignJWT({})
-    .setProtectedHeader({ alg: 'HS256' })
-    .setSubject('admin')
-    .setIssuer('taxsolutions')
-    .setAudience('admin')
-    .setIssuedAt()
-    .setExpirationTime('8h')
-    .sign(key());
-  (await cookies()).set('tax-session', value, {
+export async function loginSession(staffId: string) {
+  const raw = token();
+  await db.staffSession.create({
+    data: {
+      id: hash(raw),
+      staffId,
+      expiresAt: new Date(Date.now() + 8 * 3600000),
+    },
+  });
+  (await cookies()).set('tax-session', raw, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
@@ -40,8 +44,20 @@ export async function loginSession() {
     maxAge: 28800,
   });
 }
+export async function logoutSession() {
+  const raw = (await cookies()).get('tax-session')?.value;
+  if (raw) await db.staffSession.deleteMany({ where: { id: hash(raw) } });
+  (await cookies()).delete('tax-session');
+}
+export async function requireActor() {
+  const staff = await actor();
+  if (!staff) throw Error('UNAUTHORIZED');
+  return staff;
+}
 export async function requireAdmin() {
-  if (!(await session())) throw new Error('UNAUTHORIZED');
+  const staff = await requireActor();
+  if (staff.role === 'ACCOUNTANT') throw Error('FORBIDDEN');
+  return staff;
 }
 export async function sameOrigin() {
   const h = await headers();
@@ -51,15 +67,20 @@ export async function sameOrigin() {
   )
     throw new Error('ORIGIN');
 }
-export async function rateLimit(bucket: string, limit: number) {
+export async function rateLimit(
+  bucket: string,
+  limit: number,
+  subject?: string,
+) {
   const h = await headers();
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new Error('Missing session secret');
   // Only trust an IP header when your reverse proxy overwrites it. Otherwise use a global bucket.
   const ip =
-    process.env.TRUST_PROXY === 'true'
+    subject ??
+    (process.env.TRUST_PROXY === 'true'
       ? (h.get('x-real-ip') ?? 'unknown')
-      : 'global';
+      : 'global');
   const key = hash(secret + bucket + ip);
   const expiresAt = new Date(Date.now() + 15 * 60000);
   const rows = await db.$queryRaw<

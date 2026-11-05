@@ -17,7 +17,7 @@ export default async function Page({
   return (
     <main className="container legal-page">
       <h1>{c.cancel}</h1>
-      <Cancel token={token} c={c} />
+      <Cancel token={token} c={c} locale={locale}/>
       <a href={`/${locale}`}>{c.back}</a>
     </main>
   );

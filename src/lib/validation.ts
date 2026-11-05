@@ -2,6 +2,8 @@ import { z } from 'zod';
 const text = z.string().trim();
 export const bookingInput = z.object({
   serviceId: text.min(1).max(80),
+  staffId: z.uuid().optional(),
+  format: z.enum(['IN_PERSON', 'ONLINE']).default('IN_PERSON'),
   start: z.iso.datetime(),
   name: text.min(2).max(120),
   email: z.email().max(254),
@@ -45,6 +47,18 @@ export const serviceInput = z.object({
 });
 export const scheduleInput = z
   .object({
+    bufferMinutes: z.number().int().min(0).max(120).default(0),
+    breaks: z
+      .array(
+        z
+          .object({
+            start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+            end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+          })
+          .refine((b) => b.end > b.start),
+      )
+      .max(10)
+      .default([]),
     start: z.number().int().min(0).max(23),
     end: z.number().int().min(1).max(24),
     weekdays: z.array(z.number().int().min(0).max(6)).max(7),
