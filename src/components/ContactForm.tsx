@@ -71,7 +71,7 @@ export default function ContactForm({
         />
       </label>
       <label>
-        {c.comment}
+        {c.message}
         <textarea
           name="comment"
           required

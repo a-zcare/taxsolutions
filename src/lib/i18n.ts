@@ -50,6 +50,7 @@ export const copy = {
     email: 'E-pasts',
     phone: 'Tālrunis',
     comment: 'Komentārs (nav obligāts)',
+    message: 'Ziņa',
     consent:
       'Esmu iepazinies ar privātuma politiku un piekrītu datu apstrādei pieraksta nodrošināšanai.',
     submit: 'Apstiprināt pierakstu',
@@ -141,6 +142,7 @@ export const copy = {
     email: 'Email',
     phone: 'Phone',
     comment: 'Comment (optional)',
+    message: 'Message',
     consent:
       'I have read the privacy policy and agree to the processing of my information to arrange this appointment.',
     submit: 'Confirm appointment',
@@ -232,6 +234,7 @@ export const copy = {
     email: 'Email',
     phone: 'Телефон',
     comment: 'Комментарий (необязательно)',
+    message: 'Сообщение',
     consent:
       'Я ознакомился с политикой конфиденциальности и согласен на обработку данных для организации записи.',
     submit: 'Подтвердить запись',
