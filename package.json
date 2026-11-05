@@ -13,7 +13,9 @@
     "worker": "node --env-file-if-exists=.env --import tsx scripts/worker.ts",
     "test:integration": "node --env-file-if-exists=.env --import tsx tests/integration.ts",
     "check": "npm run test && npm run typecheck && npm run build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:pages": "node scripts/build-pages.mjs",
+    "test:pages": "node scripts/test-pages.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",

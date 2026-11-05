@@ -84,3 +84,13 @@ Browser tests: `npx playwright install --with-deps chromium`, start the built ap
 - Google Calendar export works via `.ics` and a prefilled Google Calendar link after booking. It is **not** automatic two-way synchronization. See [architecture](docs/ARCHITECTURE.md) for the extension point.
 
 See [verification report](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md) and [deployment example](docs/Caddyfile).
+
+## GitHub Pages
+
+The public demo at https://a-zcare.github.io/taxsolutions/ uses a separate static export. Run `npm run build:pages` and `npm run test:pages`. Output: `.pages-build/out`. The adapter copies only existing public presentation code and translations into an ignored build directory, configures Next.js `output: 'export'`, `basePath: '/taxsolutions'`, and `trailingSlash: true`. It does not change the primary Next.js application or require database/SMTP credentials. Each localized page is exported with its own HTML language.
+
+The Pages edition displays localized notices instead of booking/contact forms and an informational `/admin/` page. No form data is collected, bookings are not created, and database prices/content are not synchronized. The complete PostgreSQL application, availability calendar, authenticated administration, SMTP worker and Docker deployment remain available in the main project. Changes to shared public presentation code/default translations appear on the next static build. The adapter fails if the expected source data loader changes.
+
+`.github/workflows/pages.yml` validates and packages Pages on pull requests, then automatically deploys **only main** using the `github-pages` environment. Repository **Settings → Pages → Build and deployment → Source: GitHub Actions** is required (already configured at setup). The environment permits main. Deployment needs the standard workflow `pages: write` and `id-token: write` permissions; no access tokens or runtime secrets are uploaded. `.nojekyll` preserves `_next` resources. Root redirects to `/taxsolutions/lv/`, with EN/RU available from the language switcher.
+
+For a local static preview, serve the export mounted at `/taxsolutions/` using any ordinary static HTTP server. Do not use `next start` for an exported site or a SPA fallback; deep links resolve to exported `index.html` files. The build is intentionally noindex while contacts/prices/legal information remain illustrative.
