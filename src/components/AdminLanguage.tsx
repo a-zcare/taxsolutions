@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { Locale } from '@/lib/i18n';
+import ThemeToggle from './ThemeToggle';
 const translations: Record<string, Partial<Record<Locale, string>>> = {
   'Existing appointments remain valid. Closed dates take priority.': {
     lv: 'Esošie pieraksti paliek spēkā. Slēgtām dienām ir prioritāte.',
@@ -196,6 +197,7 @@ export default function AdminLanguage({
   return (
     <Context.Provider value={{ locale, t }}>
       <div className="admin-language">
+        <ThemeToggle locale={locale} />
         <label>
           LV / EN / RU
           <select

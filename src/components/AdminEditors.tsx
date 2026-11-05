@@ -1,11 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useAdminLanguage } from './AdminLanguage';
-import {
-  defaultSchedule,
-  defaultContacts,
-  type Schedule,
-} from '@/lib/defaults';
+import { defaultContacts, type Schedule } from '@/lib/defaults';
 import type { Copy } from '@/lib/i18n';
 type SaveProps = {
   pending: boolean;
@@ -139,7 +135,8 @@ export function ScheduleEditor({
                 const date = key === 'closedDates' ? closed : open;
                 if (date && !rules[key].includes(date))
                   update(key, [...rules[key], date].sort());
-                key === 'closedDates' ? setClosed('') : setOpen('');
+                if (key === 'closedDates') setClosed('');
+                else setOpen('');
               }}
             >
               {t('Add date')}

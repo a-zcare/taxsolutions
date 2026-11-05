@@ -94,3 +94,11 @@ The Pages edition displays localized notices instead of booking/contact forms an
 `.github/workflows/pages.yml` validates and packages Pages on pull requests, then automatically deploys **only main** using the `github-pages` environment. Repository **Settings → Pages → Build and deployment → Source: GitHub Actions** is required (already configured at setup). The environment permits main. Deployment needs the standard workflow `pages: write` and `id-token: write` permissions; no access tokens or runtime secrets are uploaded. `.nojekyll` preserves `_next` resources. Root redirects to `/taxsolutions/lv/`, with EN/RU available from the language switcher.
 
 For a local static preview, serve the export mounted at `/taxsolutions/` using any ordinary static HTTP server. Do not use `next start` for an exported site or a SPA fallback; deep links resolve to exported `index.html` files. The build is intentionally noindex while contacts/prices/legal information remain illustrative.
+
+## Appearance
+
+The header theme button supports light (default) and dark appearances. It stores only the explicit selection under `taxsolutions-theme` in localStorage. A small synchronous head script restores the preference before body content is displayed; blocked storage falls back to light and the toggle still works. All public pages, the primary app administration/calendar/forms and the static Pages demo share semantic CSS variables. Theme selection survives reloads, language changes and page navigation.
+
+Run `npm run lint` for Next.js/TypeScript ESLint checks. ESLint needs the TypeScript 6 API compatibility package (`typescript` npm alias); the `@typescript/native` alias retains TypeScript 7's `tsc` for type checking. These are development tools only.
+
+Theme browser checks: `npm run test:pages:e2e` starts a local static server and verifies both themes, localized navigation, persistence, first paint without hydration, blocked storage, WCAG contrast and widths 320–1440 px. Set `PAGES_TEST_URL=https://a-zcare.github.io` to run the same checks against the published site. GitHub-hosted runners use their preinstalled Google Chrome through Playwright's supported `chrome` channel; local checks use Playwright Chromium. This avoids re-downloading the browser on every deployment.

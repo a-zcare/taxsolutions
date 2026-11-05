@@ -1,4 +1,5 @@
 import './globals.css';
+import ThemeScript from '@/components/ThemeScript';
 import { headers } from 'next/headers';
 import type { Metadata } from 'next';
 export const metadata: Metadata = {
@@ -14,7 +15,10 @@ export default async function RootLayout({
 }) {
   const locale = (await headers()).get('x-site-locale') ?? 'lv';
   return (
-    <html lang={locale}>
+    <html lang={locale} data-theme="light" suppressHydrationWarning>
+      <head>
+        <ThemeScript />
+      </head>
       <body>{children}</body>
     </html>
   );

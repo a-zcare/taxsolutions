@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Language from './Language';
+import ThemeToggle from './ThemeToggle';
 import type { Copy } from '@/lib/i18n';
 export const anchors = [
   'about',
@@ -41,6 +42,7 @@ export default function Header({ locale, c }: { locale: string; c: Copy }) {
             ))}
         </nav>
         <Language locale={locale} />
+        <ThemeToggle locale={locale} />
         <a className="button small header-book" href={`/${locale}#booking`}>
           {c.book}
           <span aria-hidden="true">↗</span>

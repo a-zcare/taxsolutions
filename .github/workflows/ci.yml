@@ -54,11 +54,13 @@ jobs:
           const hash=Buffer.from(await bcrypt.hash(process.env.TEST_ADMIN_PASSWORD,12)).toString('base64');
           fs.appendFileSync(process.env.GITHUB_ENV,`ADMIN_PASSWORD_HASH_B64=${hash}\n`);
           JS
+      - run: npm run lint
       - run: npm test
       - run: npm run typecheck
       - run: npm run test:integration
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - name: Use preinstalled Chrome
+        run: google-chrome --version
       - run: npm run test:e2e
       - run: npm audit --omit=dev --audit-level=high
       - uses: actions/upload-artifact@v4

@@ -70,7 +70,8 @@ try {
     }),
   );
   check('overlapping intervals rejected by booking logic');
-  const { consent: _, ...withoutConsent } = input;
+  const { consent, ...withoutConsent } = input;
+  void consent;
   await assert.rejects(createBooking(withoutConsent));
   await assert.rejects(createBooking({ ...input, website: 'spam' }));
   check('consent and honeypot validation enforced');

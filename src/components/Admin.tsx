@@ -1,7 +1,7 @@
 'use client';
 import { useAdminLanguage } from './AdminLanguage';
 import { ScheduleEditor, ContactsEditor, ContentEditor } from './AdminEditors';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { copy, type Locale } from '@/lib/i18n';
 import { defaultSchedule, defaultContacts } from '@/lib/defaults';
 type Data = {
@@ -40,7 +40,7 @@ export default function Admin() {
     [locale, setLocale] = useState<Locale>('lv'),
     [filter, setFilter] = useState('upcoming'),
     [page, setPage] = useState(1);
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const r = await fetch(`/api/admin?page=${page}&filter=${filter}`);
       if (r.status === 401) {
@@ -52,10 +52,10 @@ export default function Admin() {
     } catch {
       setMessage(t('Unable to load data. Retry.'));
     }
-  }
+  }, [page, filter, t]);
   useEffect(() => {
     void load();
-  }, [page, filter]);
+  }, [load]);
   async function save(action: string, value: unknown) {
     setPending(true);
     setMessage('');

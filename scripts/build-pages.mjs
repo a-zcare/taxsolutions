@@ -23,6 +23,9 @@ for (const file of [
   'src/lib/defaults.ts',
   'src/components/Header.tsx',
   'src/components/Language.tsx',
+  'src/components/ThemeToggle.tsx',
+  'src/components/ThemeScript.tsx',
+  'src/lib/theme.ts',
   'public',
   'postcss.config.mjs',
 ])
@@ -192,7 +195,7 @@ for (const locale of ['lv', 'en', 'ru']) {
   const group = `src/app/(${locale})/${locale}`;
   await put(
     `${group}/layout.tsx`,
-    `import '@/app/globals.css';export {metadata} from '@/lib/metadata';export default function Layout({children}:{children:React.ReactNode}){return <html lang="${locale}"><body>{children}</body></html>}`,
+    `import '@/app/globals.css';import ThemeScript from '@/components/ThemeScript';export {metadata} from '@/lib/metadata';export default function Layout({children}:{children:React.ReactNode}){return <html lang="${locale}" data-theme="light" suppressHydrationWarning><head><ThemeScript/></head><body>{children}</body></html>}`,
   );
   await put(
     `${group}/page.tsx`,
@@ -237,7 +240,7 @@ await put(
 );
 await put(
   'src/app/(entry)/layout.tsx',
-  `import '@/app/globals.css';export {metadata} from '@/lib/metadata';export default function Layout({children}:{children:React.ReactNode}){return <html lang="lv"><body>{children}</body></html>}`,
+  `import '@/app/globals.css';import ThemeScript from '@/components/ThemeScript';export {metadata} from '@/lib/metadata';export default function Layout({children}:{children:React.ReactNode}){return <html lang="lv" data-theme="light" suppressHydrationWarning><head><ThemeScript/></head><body>{children}</body></html>}`,
 );
 await put(
   'src/app/(entry)/page.tsx',
@@ -245,7 +248,7 @@ await put(
 );
 await put(
   'src/app/(entry)/admin/page.tsx',
-  `import {demo} from '@/lib/demo';export default function Page(){return <main className="container legal-page"><h1>TaxSolutions / Admin</h1>{(['lv','en','ru'] as const).map(locale=><section key={locale} lang={locale}><h2>{demo[locale].title}</h2><p>{demo[locale].text}</p><a className="text-link" href={\`/taxsolutions/\${locale}/\`}>{demo[locale].back} →</a></section>)}</main>}`,
+  `import {demo} from '@/lib/demo';import ThemeToggle from '@/components/ThemeToggle';export default function Page(){return <main className="container legal-page"><div className="admin-toolbar"><h1>TaxSolutions / Admin</h1><ThemeToggle/></div>{(['lv','en','ru'] as const).map(locale=><section key={locale} lang={locale}><h2>{demo[locale].title}</h2><p>{demo[locale].text}</p><a className="text-link" href={\`/taxsolutions/\${locale}/\`}>{demo[locale].back} →</a></section>)}</main>}`,
 );
 await put(
   'src/app/(entry)/not-found.tsx',
@@ -255,7 +258,7 @@ const css = await readFile(path.join(target, 'src/app/globals.css'), 'utf8');
 await put(
   'src/app/globals.css',
   css +
-    `\n.demo-banner{background:#eff6ff;border-bottom:1px solid #dce5ef;padding:18px 0;color:#123b70}.demo-banner strong{font-size:13px}.demo-banner p{font-size:12px;margin:6px 0 0;max-width:950px}.demo-notice{box-shadow:none}.demo-notice p{margin-bottom:0}\n`,
+    `\n.demo-banner{background:var(--pale);border-bottom:1px solid var(--line);padding:18px 0;color:var(--navy)}.demo-banner strong{font-size:13px}.demo-banner p{font-size:12px;margin:6px 0 0;max-width:950px}.demo-notice{box-shadow:none}.demo-notice p{margin-bottom:0}\n`,
 );
 await put(
   'public/social.svg',

@@ -72,6 +72,15 @@ for (const locale of ['lv', 'en', 'ru']) {
       `Wrong HTML language: ${locale}/${doc}`,
     );
     assert(
+      text.includes('id="taxsolutions-theme-init"') &&
+        text.indexOf('id="taxsolutions-theme-init"') < text.indexOf('<body'),
+      `Theme must initialize before body: ${locale}/${doc}`,
+    );
+    assert(
+      text.includes('class="theme-toggle"'),
+      `Theme toggle missing: ${locale}/${doc}`,
+    );
+    assert(
       text.includes('demo-banner'),
       `Demo notice missing: ${locale}/${doc}`,
     );

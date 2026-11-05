@@ -22,6 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run build:pages
       - run: npm run test:pages
+      - run: npm run test:pages:e2e
       - uses: actions/upload-pages-artifact@v4
         with:
           path: .pages-build/out

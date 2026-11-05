@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import type { Locale, Copy } from '@/lib/i18n';
 export default function Calendar({
   value,
@@ -26,6 +26,12 @@ export default function Calendar({
     [available, setAvailable] = useState<string[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(false);
+  const [lastMonth] = useState(() =>
+    new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 7),
+  );
+  const resetUnavailable = useEffectEvent((available: string[]) => {
+    if (!available.includes(value)) onChange('');
+  });
   useEffect(() => {
     setLoading(true);
     setError(false);
@@ -40,7 +46,7 @@ export default function Calendar({
       })
       .then((d) => {
         setAvailable(d.available);
-        if (!d.available.includes(value)) onChange('');
+        resetUnavailable(d.available);
       })
       .catch((e) => {
         if (e.name !== 'AbortError') setError(true);
@@ -94,10 +100,7 @@ export default function Calendar({
         <strong aria-live="polite">{format.format(first)}</strong>
         <button
           type="button"
-          disabled={
-            month >=
-            new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 7)
-          }
+          disabled={month >= lastMonth}
           aria-label={
             locale === 'lv'
               ? 'Nākamais mēnesis'

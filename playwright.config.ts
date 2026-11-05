@@ -4,7 +4,15 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   use: { baseURL: 'http://localhost:3000', trace: 'retain-on-failure' },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: process.env.GITHUB_ACTIONS === 'true' ? 'chrome' : undefined,
+      },
+    },
+  ],
   reporter: [['list'], ['html', { open: 'never' }]],
   webServer: process.env.CI
     ? {
