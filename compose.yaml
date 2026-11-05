@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: taxsolutions
+      POSTGRES_USER: taxsolutions
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U taxsolutions']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  mailpit:
+    image: axllent/mailpit:v1.27
+    profiles: [dev]
+    ports:
+      - '127.0.0.1:1025:1025'
+      - '127.0.0.1:8025:8025'
+  migrate:
+    image: taxsolutions:local
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://taxsolutions:${POSTGRES_PASSWORD}@db:5432/taxsolutions
+    command: ['sh', '-c', 'npm run db:migrate && npm run db:seed']
+    depends_on:
+      db:
+        condition: service_healthy
+  app:
+    image: taxsolutions:local
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://taxsolutions:${POSTGRES_PASSWORD}@db:5432/taxsolutions
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  worker:
+    image: taxsolutions:local
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://taxsolutions:${POSTGRES_PASSWORD}@db:5432/taxsolutions
+    command: ['npm', 'run', 'worker']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+volumes:
+  postgres_data:
