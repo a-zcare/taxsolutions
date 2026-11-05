@@ -1,0 +1,68 @@
+name: Quality checks
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: taxsolutions
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: taxsolutions_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U taxsolutions'
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mailpit:
+        image: axllent/mailpit:v1.27
+        ports: ['1025:1025']
+    env:
+      DATABASE_URL: postgresql://taxsolutions:ci-only-password@localhost:5432/taxsolutions_test
+      TEST_DATABASE_URL: postgresql://taxsolutions:ci-only-password@localhost:5432/taxsolutions_test
+      APP_URL: http://localhost:3000
+      SESSION_SECRET: ci-only-secret-with-more-than-thirty-two-characters
+      ADMIN_EMAIL: admin@example.invalid
+      TEST_ADMIN_PASSWORD: ci-only-password-with-strong-length
+      SMTP_HOST: localhost
+      SMTP_PORT: '1025'
+      SMTP_FROM: 'TaxSolutions <test@example.invalid>'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run db:migrate && npm run db:seed
+      - name: Configure isolated test administrator
+        run: |
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import bcrypt from 'bcryptjs';
+          const hash=Buffer.from(await bcrypt.hash(process.env.TEST_ADMIN_PASSWORD,12)).toString('base64');
+          fs.appendFileSync(process.env.GITHUB_ENV,`ADMIN_PASSWORD_HASH_B64=${hash}\n`);
+          JS
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run test:integration
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm audit --omit=dev --audit-level=high
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
