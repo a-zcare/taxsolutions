@@ -1,5 +1,50 @@
 import type { Locale } from '../i18n';
 const labels: Record<string, [string, string]> = {
+  Workspace: ['Darba vieta', 'Рабочая область'],
+  Management: ['Pārvaldība', 'Управление'],
+  Navigation: ['Navigācija', 'Навигация'],
+  'Skip to content': ['Pāriet uz saturu', 'Перейти к содержимому'],
+  'Open navigation': ['Atvērt navigāciju', 'Открыть навигацию'],
+  'Close navigation': ['Aizvērt navigāciju', 'Закрыть навигацию'],
+  'Calendar view': ['Kalendāra skats', 'Вид календаря'],
+  day: ['Diena', 'День'],
+  week: ['Nedēļa', 'Неделя'],
+  month: ['Mēnesis', 'Месяц'],
+  'Previous period': ['Iepriekšējais periods', 'Предыдущий период'],
+  'Next period': ['Nākamais periods', 'Следующий период'],
+  'Open day': ['Atvērt dienu', 'Открыть день'],
+  Events: ['Notikumi', 'События'],
+  'Close details': ['Aizvērt informāciju', 'Закрыть подробности'],
+  'Appointment details': ['Pieraksta informācija', 'Подробности записи'],
+  'Event status': ['Notikuma statuss', 'Статус события'],
+  'Loading…': ['Ielādē…', 'Загрузка…'],
+  Retry: ['Mēģināt vēlreiz', 'Повторить'],
+  'No records yet': ['Ierakstu nav', 'Записей пока нет'],
+  'Change filters or add a record to get started.': [
+    'Mainiet filtrus vai pievienojiet ierakstu.',
+    'Измените фильтры или добавьте запись.',
+  ],
+  'No events in this period.': [
+    'Šajā periodā nav notikumu.',
+    'В этом периоде событий нет.',
+  ],
+  'Too many events. Choose a shorter period or filter.': [
+    'Pārāk daudz notikumu. Izvēlieties īsāku periodu vai filtru.',
+    'Слишком много событий. Выберите короткий период или фильтр.',
+  ],
+  'Invalid local time. Choose another time.': [
+    'Nederīgs vietējais laiks. Izvēlieties citu laiku.',
+    'Недопустимое местное время. Выберите другое время.',
+  ],
+  Updated: ['Atjaunināts', 'Обновлено'],
+  'View all': ['Skatīt visus', 'Посмотреть все'],
+  'Upcoming consultations': [
+    'Gaidāmās konsultācijas',
+    'Предстоящие консультации',
+  ],
+  'Due tasks': ['Veicamie uzdevumi', 'Задачи к выполнению'],
+  'Tasks today': ['Šodienas uzdevumi', 'Задачи на сегодня'],
+
   general: ['Vispārīgi', 'Общие вопросы'],
   accounting: ['Grāmatvedība', 'Бухгалтерия'],
   tax: ['Nodokļi', 'Налоги'],
@@ -89,7 +134,6 @@ const labels: Record<string, [string, string]> = {
   Answer: ['Atbilde', 'Ответ'],
   Connect: ['Savienot', 'Подключить'],
   Disconnect: ['Atvienot', 'Отключить'],
-  Retry: ['Mēģināt vēlreiz', 'Повторить'],
   Settings: ['Iestatījumi', 'Настройки'],
   'Sign out': ['Iziet', 'Выйти'],
   'Export personal data': [

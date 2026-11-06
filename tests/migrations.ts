@@ -51,6 +51,12 @@ try {
       'utf8',
     ),
   );
+  await client.query(
+    await readFile(
+      'prisma/migrations/20261106010000_crm_calendar_indexes/migration.sql',
+      'utf8',
+    ),
+  );
   const row = (await client.query('SELECT * FROM "Booking" WHERE id=$1', [id]))
     .rows[0];
   assert.equal(row.name, 'Synthetic retained client');

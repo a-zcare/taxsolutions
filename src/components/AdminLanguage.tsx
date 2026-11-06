@@ -1,5 +1,11 @@
 'use client';
-import { createContext, useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useCallback,
+  useState,
+} from 'react';
 import type { Locale } from '@/lib/i18n';
 import ThemeToggle from './ThemeToggle';
 const translations: Record<string, Partial<Record<Locale, string>>> = {
@@ -68,6 +74,7 @@ const translations: Record<string, Partial<Record<Locale, string>>> = {
   Question: { lv: 'Jautājums', ru: 'Вопрос' },
   Answer: { lv: 'Atbilde', ru: 'Ответ' },
   All: { lv: 'Visi', ru: 'Все' },
+  'Loading…': { lv: 'Ielādē…', ru: 'Загрузка…' },
   Administration: { lv: 'Administrēšana', ru: 'Администрирование' },
   'Business overview': { lv: 'Uzņēmuma pārskats', ru: 'Обзор работы' },
   WORKSPACE: { lv: 'DARBA VIETA', ru: 'РАБОЧАЯ ОБЛАСТЬ' },
@@ -144,6 +151,7 @@ const translations: Record<string, Partial<Record<Locale, string>>> = {
   'Price (EUR cents)': { lv: 'Cena (eirocenti)', ru: 'Цена (евроценты)' },
   Type: { lv: 'Veids', ru: 'Тип' },
   'Duration (minutes)': { lv: 'Ilgums (minūtes)', ru: 'Длительность (минуты)' },
+  Inactive: { lv: 'Neaktīvs', ru: 'Неактивна' },
   Active: { lv: 'Aktīvs', ru: 'Активна' },
   'Save service': { lv: 'Saglabāt pakalpojumu', ru: 'Сохранить услугу' },
   FIXED: { lv: 'Fiksēta', ru: 'Фиксированная' },
@@ -205,7 +213,10 @@ export default function AdminLanguage({
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
-  const t = (key: string) => translations[key]?.[locale] ?? key;
+  const t = useCallback(
+    (key: string) => translations[key]?.[locale] ?? key,
+    [locale],
+  );
   return (
     <Context.Provider value={{ locale, t }}>
       <div className="admin-language">

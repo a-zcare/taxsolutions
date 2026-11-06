@@ -31,30 +31,52 @@ type Data = {
   page: number;
   pages: number;
 };
-export default function Admin() {
+export default function Admin({
+  embedded = false,
+  initialTab = 'bookings',
+}: {
+  embedded?: boolean;
+  initialTab?: string;
+}) {
   const { t, locale: adminLocale } = useAdminLanguage();
   const [data, setData] = useState<Data>(),
-    [tab, setTab] = useState('bookings'),
+    [tab, setTab] = useState(initialTab),
     [message, setMessage] = useState(''),
     [pending, setPending] = useState(false),
+    [fetching, setFetching] = useState(true),
+    [loadError, setLoadError] = useState(false),
     [locale, setLocale] = useState<Locale>('lv'),
     [filter, setFilter] = useState('upcoming'),
     [page, setPage] = useState(1);
-  const load = useCallback(async () => {
-    try {
-      const r = await fetch(`/api/admin?page=${page}&filter=${filter}`);
-      if (r.status === 401) {
-        window.location.reload();
-        return;
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setFetching(true);
+      setLoadError(false);
+      try {
+        const r = await fetch(`/api/admin?page=${page}&filter=${filter}`, {
+          signal,
+        });
+        if (r.status === 401) {
+          window.location.reload();
+          return;
+        }
+        if (!r.ok) throw Error();
+        setData(await r.json());
+      } catch {
+        if (!signal?.aborted) {
+          setMessage(t('Unable to load data. Retry.'));
+          setLoadError(true);
+        }
+      } finally {
+        if (!signal?.aborted) setFetching(false);
       }
-      if (!r.ok) throw Error();
-      setData(await r.json());
-    } catch {
-      setMessage(t('Unable to load data. Retry.'));
-    }
-  }, [page, filter, t]);
+    },
+    [page, filter, t],
+  );
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load]);
   async function save(action: string, value: unknown) {
     setPending(true);
@@ -81,49 +103,64 @@ export default function Admin() {
   const setting = (key: string, fallback: unknown) =>
     data?.settings.find((s) => s.key === key)?.value ?? fallback;
   return (
-    <main className="admin-shell">
-      <header className="admin-header">
-        <a href="/lv" className="logo">
-          TaxSolutions <small>/ admin</small>
-        </a>
-        <button
-          className="button secondary small"
-          onClick={async () => {
-            await fetch('/api/admin/logout', { method: 'POST' });
-            window.location.reload();
-          }}
-        >
-          {t('Sign out')}
-        </button>
-      </header>
-      <a className="button secondary small" href="/workspace">CRM / Planner →</a>
-      <div className="admin-intro">
-        <p className="section-label">{t('WORKSPACE')}</p>
-        <h1>{t('Business overview')}</h1>
-        <p>
-          {data?.upcomingCount ?? '—'} {t('upcoming appointments')} ·{' '}
-          {data?.unsent ?? '—'} {t('emails waiting for delivery')}
-        </p>
-      </div>
-      <nav className="admin-tabs">
-        {['bookings', 'services', 'schedule', 'contacts', 'content'].map(
-          (name) => (
+    <div className={embedded ? 'crm-settings' : 'admin-shell'}>
+      {!embedded && (
+        <>
+          <header className="admin-header">
+            <a href="/lv" className="logo">
+              TaxSolutions <small>/ admin</small>
+            </a>
             <button
-              key={name}
-              className={tab === name ? 'selected' : ''}
-              onClick={() => {
-                setTab(name);
-                setMessage('');
+              className="button secondary small"
+              onClick={async () => {
+                await fetch('/api/admin/logout', { method: 'POST' });
+                window.location.reload();
               }}
             >
-              {t(name)}
+              {t('Sign out')}
             </button>
-          ),
-        )}
-      </nav>
-      <p role="status">{message}</p>
+          </header>
+          <a className="button secondary small" href="/workspace">
+            CRM / Planner →
+          </a>
+          <div className="admin-intro">
+            <p className="section-label">{t('WORKSPACE')}</p>
+            <h1>{t('Business overview')}</h1>
+            <p>
+              {data?.upcomingCount ?? '—'} {t('upcoming appointments')} ·{' '}
+              {data?.unsent ?? '—'} {t('emails waiting for delivery')}
+            </p>
+          </div>
+          <nav className="admin-tabs">
+            {['bookings', 'services', 'schedule', 'contacts', 'content'].map(
+              (name) => (
+                <button
+                  key={name}
+                  className={tab === name ? 'selected' : ''}
+                  onClick={() => {
+                    setTab(name);
+                    setMessage('');
+                  }}
+                >
+                  {t(name)}
+                </button>
+              ),
+            )}
+          </nav>
+        </>
+      )}
+      <p role={loadError ? 'alert' : 'status'}>{message}</p>
       {!data ? (
-        <button onClick={load}>{t('Load / retry')}</button>
+        fetching ? (
+          <p role="status">{t('Loading…')}</p>
+        ) : (
+          <button
+            className="button secondary small"
+            onClick={() => void load()}
+          >
+            {t('Load / retry')}
+          </button>
+        )
       ) : (
         <>
           {tab === 'bookings' && (
@@ -264,100 +301,115 @@ export default function Admin() {
                 )}
               </p>
               {data.services.map((s) => (
-                <form
-                  className="admin-card"
-                  key={s.id}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const f = new FormData(e.currentTarget);
-                    void save('service', {
-                      ...s,
-                      price: Number(f.get('price')),
-                      priceType: f.get('priceType'),
-                      duration: Number(f.get('duration')),
-                      active: f.get('active') === 'on',
-                      translations: Object.fromEntries(
-                        ['lv', 'en', 'ru'].map((l) => [
-                          l,
-                          {
-                            name: f.get(`${l}.name`),
-                            description: f.get(`${l}.description`),
-                          },
-                        ]),
-                      ),
-                    });
-                  }}
-                >
-                  <h2>{s.id}</h2>
-                  <div className="form-grid">
-                    {(['lv', 'en', 'ru'] as Locale[]).map((l) => (
-                      <div key={l}>
-                        <label>
-                          {l.toUpperCase()} {t('name')}
-                          <input
-                            name={`${l}.name`}
-                            defaultValue={s.translations[l].name}
-                            required
-                          />
-                        </label>
-                        <label>
-                          {t('Description')}
-                          <textarea
-                            name={`${l}.description`}
-                            defaultValue={s.translations[l].description}
-                            required
-                          />
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="form-grid">
-                    <label>
-                      {t('Price (EUR cents)')}
-                      <input
-                        type="number"
-                        name="price"
-                        min={0}
-                        max={100000000}
-                        defaultValue={s.price}
-                        required
-                      />
-                    </label>
-                    <label>
-                      {t('Type')}
-                      <select name="priceType" defaultValue={s.priceType}>
-                        {['FIXED', 'FROM', 'HOURLY', 'MONTHLY'].map((kind) => (
-                          <option key={kind} value={kind}>
-                            {t(kind)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      {t('Duration (minutes)')}
-                      <input
-                        type="number"
-                        name="duration"
-                        min={30}
-                        max={240}
-                        step={30}
-                        defaultValue={s.duration}
-                        required
-                      />
-                    </label>
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        name="active"
-                        defaultChecked={s.active}
-                      />
-                      {t('Active')}
-                    </label>
-                  </div>
-                  <button className="button small" disabled={pending}>
-                    {t('Save service')}
-                  </button>
-                </form>
+                <details className="admin-card crm-service" key={s.id}>
+                  <summary>
+                    <strong>{s.translations[adminLocale].name}</strong>
+                    <span>
+                      {new Intl.NumberFormat(adminLocale, {
+                        style: 'currency',
+                        currency: 'EUR',
+                      }).format(s.price / 100)}{' '}
+                      · {s.duration} min · {t(s.priceType)}
+                    </span>
+                    <span className="crm-badge">
+                      {s.active ? t('Active') : t('Inactive')}
+                    </span>
+                  </summary>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const f = new FormData(e.currentTarget);
+                      void save('service', {
+                        ...s,
+                        price: Number(f.get('price')),
+                        priceType: f.get('priceType'),
+                        duration: Number(f.get('duration')),
+                        active: f.get('active') === 'on',
+                        translations: Object.fromEntries(
+                          ['lv', 'en', 'ru'].map((l) => [
+                            l,
+                            {
+                              name: f.get(`${l}.name`),
+                              description: f.get(`${l}.description`),
+                            },
+                          ]),
+                        ),
+                      });
+                    }}
+                  >
+                    <p className="crm-record-id">ID: {s.id}</p>
+                    <div className="form-grid">
+                      {(['lv', 'en', 'ru'] as Locale[]).map((l) => (
+                        <div key={l}>
+                          <label>
+                            {l.toUpperCase()} {t('name')}
+                            <input
+                              name={`${l}.name`}
+                              defaultValue={s.translations[l].name}
+                              required
+                            />
+                          </label>
+                          <label>
+                            {t('Description')}
+                            <textarea
+                              name={`${l}.description`}
+                              defaultValue={s.translations[l].description}
+                              required
+                            />
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="form-grid">
+                      <label>
+                        {t('Price (EUR cents)')}
+                        <input
+                          type="number"
+                          name="price"
+                          min={0}
+                          max={100000000}
+                          defaultValue={s.price}
+                          required
+                        />
+                      </label>
+                      <label>
+                        {t('Type')}
+                        <select name="priceType" defaultValue={s.priceType}>
+                          {['FIXED', 'FROM', 'HOURLY', 'MONTHLY'].map(
+                            (kind) => (
+                              <option key={kind} value={kind}>
+                                {t(kind)}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                      <label>
+                        {t('Duration (minutes)')}
+                        <input
+                          type="number"
+                          name="duration"
+                          min={30}
+                          max={240}
+                          step={30}
+                          defaultValue={s.duration}
+                          required
+                        />
+                      </label>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          name="active"
+                          defaultChecked={s.active}
+                        />
+                        {t('Active')}
+                      </label>
+                    </div>
+                    <button className="button small" disabled={pending}>
+                      {t('Save service')}
+                    </button>
+                  </form>
+                </details>
               ))}
             </section>
           )}
@@ -407,6 +459,6 @@ export default function Admin() {
           )}
         </>
       )}
-    </main>
+    </div>
   );
 }

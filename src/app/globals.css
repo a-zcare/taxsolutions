@@ -1904,3 +1904,652 @@ summary {
     grid-template-columns: 1fr;
   }
 }
+
+/* Accounting CRM: scoped layout tokens keep the public website unchanged. */
+.crm-layout {
+  --crm-gap: 24px;
+  --crm-radius: 14px;
+  min-height: 100dvh;
+  background: var(--soft);
+  color: var(--ink);
+}
+.crm-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 248px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border-right: 1px solid var(--line);
+  padding: 28px 16px 20px;
+  overflow-y: auto;
+}
+.crm-brand {
+  padding: 0 12px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.crm-brand .logo {
+  font-size: 23px;
+}
+.crm-brand small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  margin-top: 8px;
+  color: var(--muted);
+}
+.crm-nav-group {
+  margin-bottom: 22px;
+}
+.crm-nav-group > p {
+  padding: 0 14px;
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.crm-nav-group button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 43px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--nav-text);
+  text-align: left;
+  font-size: 13px;
+  border-radius: 9px;
+  margin: 3px 0;
+}
+.crm-nav-group button:hover {
+  background: var(--soft);
+  color: var(--navy);
+}
+.crm-nav-group button.selected {
+  background: var(--accent-soft);
+  color: var(--blue);
+  font-weight: 700;
+}
+.crm-sidebar-footer {
+  margin-top: auto;
+  display: grid;
+  gap: 16px;
+  padding: 20px 12px 0;
+  border-top: 1px solid var(--line);
+}
+.crm-role {
+  color: var(--muted);
+  font-size: 10px;
+}
+.crm-sidebar-footer .button {
+  justify-content: center;
+}
+.crm-layout .crm-content {
+  margin-left: 248px;
+  max-width: none;
+  padding: 86px 36px 60px;
+  min-width: 0;
+  outline: none;
+}
+.crm-layout .admin-intro {
+  margin: 0 0 28px;
+}
+.crm-layout .admin-intro h1 {
+  font-size: clamp(27px, 3vw, 36px);
+  letter-spacing: -0.04em;
+  margin: 10px 0;
+}
+.crm-layout .admin-intro > p:last-child {
+  font-size: 13px;
+  margin: 0;
+}
+.crm-layout .section-label {
+  font-size: 10px;
+}
+.crm-layout .admin-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--crm-radius);
+  padding: 22px;
+  margin: 0 0 var(--crm-gap);
+  box-shadow: 0 3px 12px #123b7003;
+  min-width: 0;
+}
+.crm-layout h2 {
+  font-size: 17px;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+  margin: 0 0 14px;
+}
+.crm-layout p {
+  color: var(--muted);
+}
+.crm-layout label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.crm-layout input,
+.crm-layout select,
+.crm-layout textarea {
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  min-height: 42px;
+  margin-top: 7px;
+}
+.crm-layout input[type='checkbox'] {
+  min-height: 18px;
+}
+.crm-layout .button {
+  border-radius: 8px;
+  min-height: 40px;
+  padding: 10px 16px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.crm-layout .button.small {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+.crm-layout button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.crm-layout .form-grid {
+  gap: 18px;
+}
+.crm-layout .workspace-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.crm-layout .workspace-metrics .admin-card {
+  padding: 20px;
+  margin: 0;
+  border-top: 3px solid var(--line);
+}
+.crm-layout .workspace-metrics .admin-card:nth-child(-n + 4) {
+  border-top-color: var(--blue);
+}
+.crm-layout .workspace-metrics p {
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+.crm-layout .workspace-metrics strong {
+  font-size: 32px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.crm-asof {
+  font-size: 11px;
+  margin: 16px 0 24px;
+}
+.crm-dashboard-lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--crm-gap);
+}
+.crm-dashboard-lists .workspace-task-top {
+  align-items: center;
+}
+.crm-dashboard-lists h2 {
+  margin: 0;
+}
+.crm-agenda {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+}
+.crm-agenda li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 12px;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+  font-size: 12px;
+}
+.crm-agenda strong {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+.crm-agenda li > span {
+  color: var(--muted);
+}
+.crm-badge {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--pale);
+  color: var(--navy);
+  font-size: 10px;
+  width: fit-content;
+}
+.crm-menu,
+.crm-close,
+.crm-backdrop {
+  display: none !important;
+}
+.crm-skip {
+  position: fixed;
+  left: 260px;
+  top: -100px;
+  z-index: 110;
+  background: var(--card);
+  color: var(--ink);
+  padding: 16px;
+  border: 2px solid var(--blue);
+}
+.crm-skip:focus {
+  top: 8px;
+}
+.crm-empty {
+  padding: 32px 24px;
+  border: 1px dashed var(--line);
+  border-radius: var(--crm-radius);
+  text-align: center;
+  margin: 18px 0;
+}
+.crm-empty p {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.crm-feedback {
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  margin: 16px 0;
+  font-size: 13px;
+}
+.crm-feedback.error {
+  color: var(--error);
+}
+.crm-loading {
+  padding: 18px;
+  background: var(--pale);
+  border-radius: 10px;
+}
+.crm-service summary {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 18px;
+  align-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+.crm-service summary > span {
+  font-size: 12px;
+}
+.crm-service summary::before {
+  content: '+';
+  color: var(--blue);
+  position: absolute;
+  right: 18px;
+}
+.crm-service {
+  position: relative;
+}
+.crm-layout .crm-service {
+  padding: 18px 40px 18px 20px;
+  margin-bottom: 12px;
+}
+.crm-service[open] summary {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+}
+.crm-service[open] summary::before {
+  content: '−';
+}
+.crm-record-id {
+  font-size: 10px;
+}
+.crm-calendar-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.crm-period {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.crm-period label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.crm-period input {
+  margin: 0;
+  width: 155px;
+}
+.crm-segment {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 3px;
+  background: var(--soft);
+  margin-left: auto;
+}
+.crm-segment button {
+  padding: 8px 14px;
+  font-size: 12px;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  min-height: 36px;
+}
+.crm-segment button[aria-pressed='true'] {
+  background: var(--card);
+  color: var(--blue);
+  box-shadow: 0 1px 4px #00000010;
+  font-weight: 700;
+}
+.crm-calendar-filters {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.crm-timezone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin: 16px 0;
+}
+.crm-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  background: var(--line);
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.crm-calendar-day {
+  background: var(--card);
+  min-height: 150px;
+  min-width: 0;
+  padding: 8px;
+}
+.crm-calendar-day.outside {
+  background: var(--soft);
+}
+.crm-day-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 11px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 0 10px;
+  min-height: 36px;
+}
+.crm-day-heading strong {
+  font-size: 13px;
+  color: var(--ink);
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.crm-calendar-day.today .crm-day-heading strong {
+  background: var(--blue);
+  color: var(--on-primary);
+}
+.crm-day-events {
+  display: grid;
+  gap: 6px;
+}
+.crm-event {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blue);
+  background: var(--pale);
+  color: var(--ink);
+  text-align: left;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 11px;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.crm-event time {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.crm-event strong {
+  line-height: 1.4;
+}
+.crm-event > span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.crm-event.status-CANCELLED,
+.crm-event.status-COMPLETED,
+.crm-event.status-DONE {
+  border-left-color: var(--muted);
+  background: var(--soft);
+}
+.crm-event.status-CANCELLED strong {
+  text-decoration: line-through;
+}
+.crm-event[aria-pressed='true'] {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+.crm-day-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 12px 0;
+}
+.crm-calendar-week .crm-calendar-day {
+  min-height: 400px;
+}
+.crm-calendar-day.crm-calendar-grid {
+  grid-template-columns: 1fr;
+}
+.crm-calendar-day.crm-calendar-grid > section {
+  min-height: 220px;
+}
+.crm-calendar-day.crm-calendar-grid .crm-event {
+  grid-template-columns: 100px 1fr 1fr;
+  align-items: center;
+  padding: 14px;
+  font-size: 13px;
+}
+.crm-event-detail {
+  margin-top: 24px !important;
+}
+.crm-event-detail form {
+  max-width: 400px;
+  margin-top: 20px;
+}
+body:has(.crm-layout) .admin-language {
+  position: absolute;
+  right: 36px;
+  top: 18px;
+  padding: 0;
+  margin: 0;
+  z-index: 20;
+}
+@media (min-width: 961px) and (max-width: 1200px) {
+  .crm-layout .crm-content {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .crm-layout .workspace-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .crm-calendar-week {
+    grid-template-columns: 1fr;
+  }
+  .crm-calendar-week .crm-calendar-day {
+    min-height: 100px;
+  }
+}
+@media (max-width: 960px) {
+  .crm-sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+    width: min(290px, 86vw);
+    visibility: hidden;
+  }
+  .crm-nav-open .crm-sidebar {
+    transform: none;
+    visibility: visible;
+  }
+  .crm-nav-open .crm-backdrop {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    background: #0b122080;
+    z-index: 70;
+  }
+  .crm-menu {
+    display: inline-flex !important;
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    margin: 0;
+    z-index: 30;
+  }
+  .crm-close {
+    display: inline-flex !important;
+  }
+  .crm-layout .crm-content {
+    margin-left: 0;
+    padding: 90px 20px 48px;
+  }
+  body:has(.crm-layout) .admin-language {
+    right: 20px;
+    top: 18px;
+  }
+  .crm-skip {
+    left: 16px;
+  }
+  .crm-calendar-week {
+    grid-template-columns: 1fr;
+  }
+  .crm-calendar-week .crm-calendar-day {
+    min-height: 100px;
+  }
+  .crm-calendar-month {
+    gap: 8px;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+  }
+  .crm-calendar-month .crm-calendar-day {
+    min-height: 90px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+  }
+  .crm-calendar-month .crm-day-heading > span {
+    display: none;
+  }
+  .crm-calendar-month .crm-event {
+    padding: 4px;
+    font-size: 10px;
+  }
+  .crm-calendar-month .crm-event > span,
+  .crm-calendar-month .crm-event time {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .crm-layout {
+    --crm-gap: 16px;
+  }
+  .crm-layout .crm-content {
+    padding: 88px 14px 40px;
+  }
+  .crm-layout .admin-card {
+    padding: 16px;
+  }
+  .crm-layout .workspace-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .crm-layout .workspace-metrics .admin-card {
+    padding: 16px;
+  }
+  .crm-layout .workspace-metrics strong {
+    font-size: 28px;
+  }
+  .crm-dashboard-lists {
+    grid-template-columns: 1fr;
+  }
+  .crm-calendar-controls {
+    gap: 12px;
+  }
+  .crm-segment {
+    margin-left: 0;
+    width: 100%;
+  }
+  .crm-segment button {
+    flex: 1;
+  }
+  .crm-period label {
+    width: 100%;
+  }
+  .crm-calendar-filters {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .crm-calendar-month {
+    gap: 2px;
+  }
+  .crm-calendar-month .crm-calendar-day {
+    min-height: 80px;
+    padding: 3px;
+  }
+  .crm-calendar-month .crm-event {
+    border-left-width: 2px;
+    padding: 3px;
+  }
+  .crm-calendar-month .crm-day-heading {
+    justify-content: center;
+  }
+  .crm-calendar-day.crm-calendar-grid .crm-event {
+    grid-template-columns: 1fr;
+  }
+  .crm-service summary {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .crm-layout .crm-service {
+    padding-right: 32px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crm-sidebar {
+    transition: none;
+  }
+}
+/* Theme colors change together; only pointer movement is animated. */
+.crm-layout .button {
+  transition: transform 0.2s;
+}
+.crm-layout .admin-card .workspace-task-top > .button {
+  margin-top: 0;
+}

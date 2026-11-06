@@ -44,6 +44,8 @@ model Booking {
  tasks Task[]
  meeting VideoMeeting?
  videoJobs VideoJob[]
+ @@index([staffId,start])
+ @@index([start])
 }
 model Setting {
  key String @id
