@@ -16,6 +16,7 @@ V2 adds a staff workspace at `/workspace`: Owner/Admin/Accountant roles, mandato
 - [Validation record and pending acceptance](docs/v2/VALIDATION.md)
 - [VPS capacity and operating budget](docs/v2/COSTS.md)
 - [PWA, service worker cache rules and privacy center](docs/PWA-PRIVACY.md)
+- [Verified product readiness, release blockers and P0/P1/P2 backlog](docs/PRODUCTION-READINESS.md)
 
 ## Local development
 
