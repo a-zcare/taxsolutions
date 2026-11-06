@@ -26,6 +26,7 @@ import BookingForm from '@/components/BookingForm';
 import ContactForm from '@/components/ContactForm';
 import FaqSearch from '@/components/FaqSearch';
 import {approvedFaq} from '@/lib/v2/faq';
+import InstallApp from '@/components/InstallApp';
 export const dynamic = 'force-dynamic';
 export async function generateMetadata({
   params,
@@ -313,8 +314,10 @@ export default async function Page({
               <a href={`/${locale}/privacy`}>{c.privacy}</a>
               <a href={`/${locale}/terms`}>{c.terms}</a>
               <a href={`/${locale}/legal`}>{c.legal}</a>
+              <a href={`/${locale}/privacy#privacy-center`}>{({ lv: 'Privātuma iestatījumi', en: 'Privacy settings', ru: 'Настройки конфиденциальности' } as const)[locale]}</a>
             </nav>
             <span>{c.demoNotice}</span>
+            <InstallApp locale={locale} />
           </div>
         </div>
       </footer>

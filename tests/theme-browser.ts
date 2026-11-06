@@ -88,7 +88,7 @@ export function themeTests(prefix = '') {
         if (current !== theme) await page.locator('.theme-toggle').click();
         await expect(page.locator('html')).toHaveAttribute('lang', locale);
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-        for (const width of [320, 375, 768, 1440]) {
+        for (const width of [320, 360, 375, 390, 430, 768, 1024, 1440, 1920]) {
           await page.setViewportSize({ width, height: 900 });
           expect(
             await page.evaluate(
@@ -125,5 +125,32 @@ export function themeTests(prefix = '') {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.locator('.theme-toggle').click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+  test('PWA manifest, safe service-worker scope and public-only offline cache', async ({ page, context }) => {
+    await page.goto(home('en'));
+    const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
+    expect(manifestHref).toBe(`${prefix}/manifest.webmanifest`);
+    const manifestResponse = await page.request.get(manifestHref!);
+    expect(manifestResponse.ok()).toBe(true);
+    const manifest = await manifestResponse.json();
+    expect(manifest.name).toBe('Tax Solutions');
+    expect(manifest.start_url).toBe('./lv/');
+    for (const icon of manifest.icons) {
+      expect((await page.request.get(`${prefix}/${icon.src.replace(/^\.\//, '')}`)).ok()).toBe(true);
+    }
+    await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+    await page.reload();
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+    const cacheUrls = await page.evaluate(async () => {
+      const keys = await caches.keys();
+      const requests = await Promise.all(keys.map(async (key) => (await caches.open(key)).keys()));
+      return requests.flat().map((request) => new URL(request.url).pathname);
+    });
+    expect(cacheUrls.length).toBeGreaterThan(0);
+    expect(cacheUrls.some((url) => /\/(admin|workspace|api)(\/|$)/.test(url))).toBe(false);
+    await context.setOffline(true);
+    await page.goto(`${prefix}/ru/`);
+    await expect(page.locator('html')).toContainText('Нет подключения к интернету');
+    await context.setOffline(false);
   });
 }

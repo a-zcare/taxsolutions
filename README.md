@@ -15,6 +15,8 @@ V2 adds a staff workspace at `/workspace`: Owner/Admin/Accountant roles, mandato
 - [Video account requirements and activation](docs/v2/VIDEO-PROVIDERS.md)
 - [Validation record and pending acceptance](docs/v2/VALIDATION.md)
 - [VPS capacity and operating budget](docs/v2/COSTS.md)
+- [PWA, service worker cache rules and privacy center](docs/PWA-PRIVACY.md)
+- [Verified product readiness, release blockers and P0/P1/P2 backlog](docs/PRODUCTION-READINESS.md)
 
 ## Local development
 
@@ -46,6 +48,7 @@ npm run build
 npm audit --omit=dev --audit-level=high
 npm run build:pages
 npm run test:pages
+npm run test:pages:e2e
 ```
 
 Database/integration/browser tests require a separate local database containing `taxsolutions_test` in its name. Apply migrations and seed to that database and configure TEST_DATABASE_URL, APP_ENV=test, TEST_ADMIN_PASSWORD, TEST_TOTP_SECRET and DATA_ENCRYPTION_KEY in the ignored local environment. Run `scripts/test-fixtures.ts` with the **test** DATABASE_URL; do not use fixtures on development/customer data. Run `npm run test:integration`, `npm run test:platform`, `npm run test:migrations`. SMTP integration uses local Mailpit. Browser tests require the built app started with the test DATABASE_URL and Playwright Chromium (`npx playwright install --with-deps chromium`). Tests create synthetic appointments and exercise MFA, themes, languages, origin checks and mobile layout. CI supplies isolated PostgreSQL and Mailpit.
@@ -57,6 +60,8 @@ Prices, contacts and legal texts remain demonstration defaults until verified by
 The public demo at https://a-zcare.github.io/taxsolutions/ uses a separate static export. Run `npm run build:pages` and `npm run test:pages`. Output: `.pages-build/out`. The adapter copies only existing public presentation code and translations into an ignored build directory, configures Next.js `output: 'export'`, `basePath: '/taxsolutions'`, and `trailingSlash: true`. It does not change the primary Next.js application or require database/SMTP credentials. Each localized page is exported with its own HTML language.
 
 The Pages edition displays localized notices instead of booking/contact forms and an informational `/admin/` page. No form data is collected, bookings are not created, and database prices/content are not synchronized. The complete PostgreSQL application, availability calendar, authenticated administration, SMTP worker and Docker deployment remain available in the main project. Changes to shared public presentation code/default translations appear on the next static build. The adapter fails if the expected source data loader changes.
+
+The public site includes an installable PWA manifest, app icons and an offline notice. Its service worker caches only public language pages and immutable static assets; admin/workspace routes and all API requests stay network-only. iPhone/iPad users can use Safari **Share → Add to Home Screen**; supported desktop browsers show their native install action. The privacy center is linked from the footer. Since no optional analytics or marketing scripts are currently present, no misleading analytics consent banner or unused opt-in categories are shown. Review [PWA/privacy behavior and legal release blockers](docs/PWA-PRIVACY.md) before enabling third-party tracking or production data processing.
 
 `.github/workflows/pages.yml` validates and packages Pages on pull requests, then automatically deploys **only main** using the `github-pages` environment. Repository **Settings → Pages → Build and deployment → Source: GitHub Actions** is required (already configured at setup). The environment permits main. Deployment needs the standard workflow `pages: write` and `id-token: write` permissions; no access tokens or runtime secrets are uploaded. `.nojekyll` preserves `_next` resources. Root redirects to `/taxsolutions/lv/`, with EN/RU available from the language switcher.
 

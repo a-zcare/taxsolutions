@@ -1,5 +1,6 @@
 import './globals.css';
 import ThemeScript from '@/components/ThemeScript';
+import PwaRegister from '@/components/PwaRegister';
 import { headers } from 'next/headers';
 import type { Metadata } from 'next';
 export const metadata: Metadata = {
@@ -7,6 +8,9 @@ export const metadata: Metadata = {
   title: { default: 'TaxSolutions', template: '%s | TaxSolutions' },
   description:
     'Multilingual accounting and tax services website with online appointment booking, availability calendar, and transparent pricing.',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'TaxSolutions' },
+  icons: { apple: '/icons/apple-touch-icon.png' },
 };
 export default async function RootLayout({
   children,
@@ -19,7 +23,7 @@ export default async function RootLayout({
       <head>
         <ThemeScript />
       </head>
-      <body>{children}</body>
+      <body>{children}<PwaRegister /></body>
     </html>
   );
 }
