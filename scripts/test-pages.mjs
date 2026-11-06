@@ -64,7 +64,7 @@ for (const file of html) {
   }
 }
 for (const locale of ['lv', 'en', 'ru']) {
-  for (const doc of ['', 'privacy/', 'terms/', 'legal/']) {
+  for (const doc of ['', 'privacy/', 'terms/', 'legal/', 'cookies/']) {
     const text = await readFile(
       path.join(root, locale, doc, 'index.html'),
       'utf8',
@@ -86,8 +86,22 @@ for (const locale of ['lv', 'en', 'ru']) {
       text.includes('demo-banner'),
       `Demo notice missing: ${locale}/${doc}`,
     );
+    if (!doc) {
+      assert(text.includes('/taxsolutions/manifest.webmanifest'), 'PWA manifest link missing');
+      assert(text.includes('privacy-center'), 'Privacy center link missing');
+    }
   }
 }
+const manifest = JSON.parse(await readFile(path.join(root, 'manifest.webmanifest'), 'utf8'));
+assert.equal(manifest.name, 'Tax Solutions');
+assert.equal(manifest.start_url, './lv/');
+for (const icon of manifest.icons) {
+  const file = path.join(root, icon.src.replace(/^\.\//, ''));
+  assert((await stat(file)).isFile(), `Missing PWA icon ${icon.src}`);
+}
+const worker = await readFile(path.join(root, 'sw.js'), 'utf8');
+assert(/admin\|workspace/.test(worker) && worker.includes('/api/'));
+assert((await stat(path.join(root, 'offline.html'))).isFile(), 'Offline fallback missing');
 assert(
   files.every((f) => !path.relative(root, f).startsWith('api/')),
   'API routes must not be exported',
@@ -99,5 +113,5 @@ assert(
   ),
 );
 console.log(
-  `Static Pages checks passed: ${html.length} HTML files, ${links} local links/resources, LV/EN/RU and legal pages; no data-collection forms or API routes.`,
+  `Static Pages checks passed: ${html.length} HTML files, ${links} local links/resources, LV/EN/RU, legal pages and PWA assets; no data-collection forms or API routes.`,
 );

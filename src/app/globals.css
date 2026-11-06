@@ -2553,3 +2553,32 @@ body:has(.crm-layout) .admin-language {
 .crm-layout .admin-card .workspace-task-top > .button {
   margin-top: 0;
 }
+
+.install-app {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.install-app summary { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.install-app p { max-width: 28rem; color: var(--muted); }
+.privacy-center { margin: 32px 0; padding: clamp(20px, 4vw, 36px); border: 1px solid var(--line); border-radius: 18px; background: var(--card); }
+.privacy-center h2 { margin-top: 0; }
+.privacy-center-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.privacy-center-grid article { padding: 18px; border-radius: 14px; background: var(--soft); }
+.privacy-center-grid h3 { margin: 0 0 8px; }
+.privacy-center p { line-height: 1.65; }
+.privacy-center nav { display: flex; flex-wrap: wrap; gap: 16px; }
+.privacy-center nav a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 640px) {
+  .privacy-center-grid { grid-template-columns: 1fr; }
+  .site-footer { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+}

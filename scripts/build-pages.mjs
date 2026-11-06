@@ -25,6 +25,9 @@ for (const file of [
   'src/components/Language.tsx',
   'src/components/ThemeToggle.tsx',
   'src/components/ThemeScript.tsx',
+  'src/components/PwaRegister.tsx',
+  'src/components/InstallApp.tsx',
+  'src/components/PrivacyCenter.tsx',
   'src/lib/theme.ts',
   'src/components/FaqSearch.tsx',
   'src/lib/v2/ui.ts',
@@ -142,7 +145,9 @@ await transform(
       .replaceAll(
         'href={`/${locale}/legal`}',
         'href={`/taxsolutions/${locale}/legal/`}',
-      );
+      )
+      .replaceAll('href={`/${locale}/cookies`}', 'href={`/taxsolutions/${locale}/cookies/`}')
+      .replaceAll('href={`/${locale}/privacy#privacy-center`}', 'href={`/taxsolutions/${locale}/privacy/#privacy-center`}');
   },
 );
 await transform(
@@ -152,7 +157,7 @@ await transform(
     s
       .replace(
         "export const dynamic = 'force-dynamic';",
-        `export const dynamic='force-static';export const dynamicParams=false;export function generateStaticParams(){return ['lv','en','ru'].flatMap(locale=>['privacy','terms','legal'].map(document=>({locale,document})))}`,
+        `export const dynamic='force-static';export const dynamicParams=false;export function generateStaticParams(){return ['lv','en','ru'].flatMap(locale=>['privacy','terms','legal','cookies'].map(document=>({locale,document})))}`,
       )
       .replace(
         "import Header from '@/components/Header';",
@@ -196,18 +201,25 @@ await transform(
         'href={`/taxsolutions${path.replace(/^\\/(lv|en|ru)/, `/${l}`)}`}',
       ),
 );
+await transform(
+  'src/components/PrivacyCenter.tsx',
+  'src/components/PrivacyCenter.tsx',
+  (s) => s
+    .replaceAll('href={`/${locale}/privacy`}', 'href={`/taxsolutions/${locale}/privacy/`}')
+    .replaceAll('href={`/${locale}/cookies`}', 'href={`/taxsolutions/${locale}/cookies/`}'),
+);
 // Explicit localized root layouts give every exported HTML file its correct lang.
 for (const locale of ['lv', 'en', 'ru']) {
   const group = `src/app/(${locale})/${locale}`;
   await put(
     `${group}/layout.tsx`,
-    `import '@/app/globals.css';import ThemeScript from '@/components/ThemeScript';export {metadata} from '@/lib/metadata';export default function Layout({children}:{children:React.ReactNode}){return <html lang="${locale}" data-theme="light" suppressHydrationWarning><head><ThemeScript/></head><body>{children}</body></html>}`,
+    `import '@/app/globals.css';import ThemeScript from '@/components/ThemeScript';import PwaRegister from '@/components/PwaRegister';export {metadata} from '@/lib/metadata';export default function Layout({children}:{children:React.ReactNode}){return <html lang="${locale}" data-theme="light" suppressHydrationWarning><head><ThemeScript/></head><body>{children}<PwaRegister/></body></html>}`,
   );
   await put(
     `${group}/page.tsx`,
     `import Page,{generateMetadata as metadataForLocale} from '@/app/[locale]/page';export function generateMetadata(){return metadataForLocale({params:Promise.resolve({locale:'${locale}'})})}export default function LocalPage(){return Page({params:Promise.resolve({locale:'${locale}'})})}`,
   );
-  for (const document of ['privacy', 'terms', 'legal'])
+  for (const document of ['privacy', 'terms', 'legal', 'cookies'])
     await put(
       `${group}/${document}/page.tsx`,
       `import Page,{generateMetadata as metadataForLocale} from '@/app/[locale]/[document]/page';const params=Promise.resolve({locale:'${locale}',document:'${document}'});export function generateMetadata(){return metadataForLocale({params})}export default function LegalPage(){return Page({params})}`,
@@ -231,6 +243,7 @@ for (const locale of ['lv', 'en', 'ru']) {
     'privacy/page.tsx',
     'terms/page.tsx',
     'legal/page.tsx',
+    'cookies/page.tsx',
   ]) {
     const p = path.join(target, base, file);
     let s = await readFile(p, 'utf8');
@@ -242,7 +255,7 @@ for (const locale of ['lv', 'en', 'ru']) {
 }
 await put(
   'src/lib/metadata.ts',
-  `import type {Metadata} from 'next';export const metadata:Metadata={metadataBase:new URL('https://a-zcare.github.io'),title:{default:'TaxSolutions',template:'%s | TaxSolutions'},icons:{icon:'/taxsolutions/icon.svg'},robots:{index:false,follow:true}};`,
+  `import type {Metadata} from 'next';export const metadata:Metadata={metadataBase:new URL('https://a-zcare.github.io'),title:{default:'TaxSolutions',template:'%s | TaxSolutions'},manifest:'/taxsolutions/manifest.webmanifest',icons:{icon:'/taxsolutions/icon.svg',apple:'/taxsolutions/icons/apple-touch-icon.png'},appleWebApp:{capable:true,statusBarStyle:'default',title:'TaxSolutions'},robots:{index:false,follow:true}};`,
 );
 await put(
   'src/app/(entry)/layout.tsx',
@@ -291,7 +304,7 @@ await put(
   'User-agent: *\nDisallow: /taxsolutions/admin/\nSitemap: https://a-zcare.github.io/taxsolutions/sitemap.xml\n',
 );
 const urls = ['lv', 'en', 'ru'].flatMap((l) =>
-  ['', 'privacy/', 'terms/', 'legal/'].map(
+  ['', 'privacy/', 'terms/', 'legal/', 'cookies/'].map(
     (p) => `https://a-zcare.github.io/taxsolutions/${l}/${p}`,
   ),
 );
