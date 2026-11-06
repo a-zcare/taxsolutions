@@ -88,7 +88,7 @@ export function themeTests(prefix = '') {
         if (current !== theme) await page.locator('.theme-toggle').click();
         await expect(page.locator('html')).toHaveAttribute('lang', locale);
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-        for (const width of [320, 375, 768, 1440]) {
+        for (const width of [320, 360, 375, 390, 430, 768, 1024, 1440, 1920]) {
           await page.setViewportSize({ width, height: 900 });
           expect(
             await page.evaluate(

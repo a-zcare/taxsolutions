@@ -111,11 +111,16 @@ test('mobile sidebar, locales, loading failure retry and calendar navigation', a
   await expect(
     page.getByRole('heading', { name: 'Clients', exact: true }),
   ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
+  for (const width of [320, 360, 375, 390, 430, 768, 1024, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      `CRM viewport width ${width}`,
+    ).toBe(true);
+  }
+  await page.setViewportSize({ width: 375, height: 812 });
   await page.route('**/api/workspace?view=calendar**', (route) =>
     route.fulfill({ status: 503, json: { error: 'SERVER_ERROR' } }),
   );

@@ -11,7 +11,7 @@ Evidence snapshot: feature work after CRM commit `1313146` and PWA commit `1849f
 | CRM clients/tasks | Core persistence and scoped APIs/UI present | CRM/platform integration tests cover scopes, IDOR, stale versions, assignment and KPI | Client portal and document vault are not implemented |
 | PWA installability | Implemented foundation | Manifest/icon/offline static assertions and export validation | Native install behavior not verified on physical iOS/Android or installed desktop apps |
 | PWA cache isolation | Implemented with public allowlist | Unit tests assert admin/workspace/API/query/external requests are not intercepted | Verify after deployment on the final HTTPS origin and supported browsers |
-| Privacy and cookies | Privacy center and cookie policy implemented | Source inspection and static checks; no optional tracking code found | No consent banner is needed while there are no optional technologies. Controller, processors, retention and legal grounds require owner/privacy review |
+| Privacy and cookies | Privacy center and cookie policy implemented | Source inspection and static checks; no optional tracking code found | No consent banner is needed while there are no optional technologies. Controller, processors, retention, legal grounds and data-subject request workflow require owner/privacy review and implementation |
 | Analytics | Not enabled | Repository inspection found no analytics/marketing scripts | Add only with privacy review and prior-consent gating if required |
 | Video meetings | Provider interfaces and mock lifecycle exist in PR #2 | Mock and failure/idempotency platform checks | Real OAuth providers require account credentials, consent scopes, review and operational testing |
 | Document upload/client portal | Not implemented | No route or storage facility exposed | Design and threat model before accepting client files or portal access |
@@ -26,6 +26,7 @@ Evidence snapshot: feature work after CRM commit `1313146` and PWA commit `1849f
 - Confirm the legal controller, processors/DPAs, lawful bases and actual retention/deletion schedule; replace all placeholders and obtain professional review.
 - Configure and test real SMTP delivery, worker monitoring, encrypted off-host backup credentials, restore and recovery objectives in staging.
 - Complete MFA recovery procedure, account lockout/rate-limit operations, CSP review, and role-by-role security review against the actual deployment.
+- Implement and verify data-subject access/export/deletion workflows and enforce the owner-approved retention schedule, including backup expiry.
 - Verify PWA registration, cache behavior, privacy choices, and responsive flows on supported live HTTPS devices/browsers.
 - Verify real contacts, prices, holiday schedule, service duration and booking policies before making public claims.
 
