@@ -8,6 +8,7 @@ Next.js App Router + TypeScript + Tailwind CSS + PostgreSQL + Prisma. Public web
 
 V2 adds a staff workspace at `/workspace`: Owner/Admin/Accountant roles, mandatory TOTP, scoped CRM records, tasks/Kanban/calendar, recurring deadlines and rule-based assignment, approved multilingual FAQ, inquiries, audit events and optional video integrations. This branch is for review; do not merge or deploy with real customer data without separate approval. Existing GitHub Pages remains a static demonstration.
 
+- [Accounting CRM interface, calendar and migration notes](docs/CRM-INTERFACE.md)
 - [Audit and module plan](docs/v2/AUDIT-PLAN.md)
 - [Ubuntu/Docker deployment, upgrades, backup and recovery](docs/v2/DEPLOYMENT.md)
 - [Security boundaries, retention and privacy acceptance](docs/v2/SECURITY-OPERATIONS.md)

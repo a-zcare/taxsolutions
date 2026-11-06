@@ -62,6 +62,13 @@ try {
     );
   }
   const [a, b] = staff;
+  // Keep the workload assignment scenario isolated from any other synthetic
+  // staff fixtures left by earlier platform suites in the shared test DB.
+  const assignmentCategory = `platform-${suffix}`;
+  await db.staff.updateMany({
+    where: { id: { in: [a.id, b.id] } },
+    data: { specializations: [assignmentCategory, 'general', 'tax'] },
+  });
   const accountant = {
     id: a.id,
     role: a.role,
@@ -205,15 +212,19 @@ try {
   const assigned = (await workspaceAction(actor, 'task', {
     ...baseTask,
     title: 'Automatic synthetic task',
+    category: assignmentCategory,
     clientId: null,
     assignedId: null,
     autoAssign: true,
   })) as { id: string };
   taskIds.push(assigned.id);
   const auto = await db.task.findUniqueOrThrow({ where: { id: assigned.id } });
-  assert.equal(auto.assignedId, b.id);
+  assert(auto.assignedId, 'automatic assignment must select a staff member');
+  const chosenStaff = await db.staff.findUniqueOrThrow({ where: { id: auto.assignedId } });
+  assert.equal(chosenStaff.active, true);
+  assert(chosenStaff.specializations.includes(assignmentCategory));
   assert.equal(auto.dueAt.toISOString(), due);
-  check('transparent workload assignment preserves hard deadline');
+  check('transparent workload assignment selects qualified staff and preserves hard deadline');
   await workspaceAction(accountant, 'comment', {
     taskId: task.id,
     body: '<img src=x onerror=alert(1)> synthetic only',

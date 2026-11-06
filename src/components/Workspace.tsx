@@ -5,6 +5,9 @@ import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { useAdminLanguage } from './AdminLanguage';
 import { workspaceLabel } from '@/lib/v2/ui';
 import type { Actor } from '@/lib/v2/policy';
+import CrmShell from './CrmShell';
+import CrmCalendar from './CrmCalendar';
+import Admin from './Admin';
 import { ScheduleEditor } from './AdminEditors';
 import { defaultSchedule } from '@/lib/defaults';
 type Row = Record<string, unknown>;
@@ -20,10 +23,13 @@ function fields(form: HTMLFormElement) {
   return Object.fromEntries(new FormData(form));
 }
 export default function Workspace({ actor }: { actor: Actor }) {
-  const { locale } = useAdminLanguage();
+  const { locale, t: adminT } = useAdminLanguage();
   const router = useRouter();
   const t = useCallback((s: string) => workspaceLabel(s, locale), [locale]);
   const privileged = actor.role !== 'ACCOUNTANT';
+  const [loading, setLoading] = useState(true),
+    [loadError, setLoadError] = useState(false);
+  const settingsView = ['services', 'schedule', 'contacts', 'content'];
   const [view, setView] = useState('dashboard'),
     [data, setData] = useState<Snapshot>({}),
     [page, setPage] = useState(1),
@@ -36,24 +42,44 @@ export default function Workspace({ actor }: { actor: Actor }) {
     [editing, setEditing] = useState<Row | null>(null),
     [mode, setMode] = useState('List'),
     [revision, setRevision] = useState(0);
-  const load = useCallback(async () => {
-    if (view === 'calendar') return;
-    try {
-      const r = await fetch(
-        `/api/workspace?view=${view}&page=${page}&q=${encodeURIComponent(query)}&status=${status}`,
-      );
-      if (r.status === 401) {
-        router.replace('/admin');
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      if (
+        ['calendar', 'services', 'schedule', 'contacts', 'content'].includes(
+          view,
+        )
+      ) {
+        setLoading(false);
         return;
       }
-      if (!r.ok) throw Error();
-      setData(await r.json());
-    } catch {
-      setMessage(t('Request failed'));
-    }
-  }, [view, page, query, status, t, router]);
+      setLoading(true);
+      setLoadError(false);
+      try {
+        const r = await fetch(
+          `/api/workspace?view=${view}&page=${page}&q=${encodeURIComponent(query)}&status=${status}`,
+          { signal },
+        );
+        if (r.status === 401) {
+          router.replace('/admin');
+          return;
+        }
+        if (!r.ok) throw Error();
+        setData(await r.json());
+      } catch {
+        if (!signal?.aborted) {
+          setLoadError(true);
+          setData({});
+        }
+      } finally {
+        if (!signal?.aborted) setLoading(false);
+      }
+    },
+    [view, page, query, status, router],
+  );
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load, revision]);
   useEffect(() => {
     const controller = new AbortController();
@@ -244,95 +270,99 @@ export default function Workspace({ actor }: { actor: Actor }) {
     );
   }
   return (
-    <main className="workspace-shell">
-      <header className="admin-header">
-        <a className="logo" href={`/${locale}`}>
-          TaxSolutions <small>/ CRM</small>
-        </a>
-        <div className="workspace-actions">
-          {privileged && (
-            <a href="/admin" className="button secondary small">
-              {t('Settings')}
-            </a>
-          )}
-          <button
-            className="button secondary small"
-            onClick={async () => {
-              await fetch('/api/admin/logout', { method: 'POST' });
-              router.replace('/admin');
-            }}
-          >
-            {t('Sign out')}
-          </button>
-        </div>
-      </header>
+    <CrmShell
+      view={view}
+      role={actor.role}
+      privileged={privileged}
+      onNavigate={(key) => {
+        setView(key);
+        setPage(1);
+        setStatus('');
+        setQuery('');
+        setEditing(null);
+        setMessage('');
+        setData({});
+      }}
+    >
       <div className="admin-intro">
         <p className="section-label">
           {t('WORKSPACE')} · {t(actor.role)}
         </p>
         <h1>
-          {t(
-            view === 'dashboard'
-              ? 'Dashboard'
-              : view === 'clients'
-                ? 'Clients'
-                : view === 'tasks'
-                  ? 'Tasks'
-                  : view === 'bookings'
-                    ? 'Bookings'
-                    : view === 'staff'
-                      ? 'Staff'
-                      : view === 'inquiries'
-                        ? 'Inquiries'
-                        : view === 'calendar'
-                          ? 'Calendar'
-                          : view === 'faq'
-                            ? 'FAQ'
-                            : view === 'audit'
-                              ? 'Audit'
-                              : 'Video',
-          )}
+          {settingsView.includes(view)
+            ? adminT(view)
+            : view === 'dashboard'
+              ? adminT('Business overview')
+              : t(
+                  view === 'dashboard'
+                    ? 'Business overview'
+                    : view === 'clients'
+                      ? 'Clients'
+                      : view === 'tasks'
+                        ? 'Tasks'
+                        : view === 'bookings'
+                          ? 'Bookings'
+                          : view === 'staff'
+                            ? 'Staff'
+                            : view === 'inquiries'
+                              ? 'Inquiries'
+                              : view === 'calendar'
+                                ? 'Calendar'
+                                : view === 'faq'
+                                  ? 'FAQ'
+                                  : view === 'audit'
+                                    ? 'Audit'
+                                    : 'Video',
+                )}
         </h1>
         <p>{t('No financial documents or passport details.')}</p>
       </div>
-      <nav className="admin-tabs">
-        {[
-          'dashboard',
-          'clients',
-          'inquiries',
-          'tasks',
-          'bookings',
-          'calendar',
-          'staff',
-          'faq',
-          ...(privileged ? ['audit'] : []),
-          'video',
-        ].map((key) => (
-          <button
-            key={key}
-            className={view === key ? 'selected' : ''}
-            onClick={() => {
-              setView(key);
-              setPage(1);
-              setStatus('');
-              setQuery('');
-              setEditing(null);
-              setMessage('');
-            }}
-          >
-            {t(key === 'faq' ? 'FAQ' : key[0].toUpperCase() + key.slice(1))}
-          </button>
-        ))}
-      </nav>
       <p role="status" className="workspace-message">
         {message}
       </p>
+      {loading && (
+        <p role="status" className="crm-loading">
+          {t('Loading…')}
+        </p>
+      )}
+      {loadError && (
+        <div role="alert" className="crm-feedback error">
+          {t('Request failed')}{' '}
+          <button
+            className="button secondary small"
+            onClick={() => void load()}
+          >
+            {t('Retry')}
+          </button>
+        </div>
+      )}
+      {settingsView.includes(view) && privileged && (
+        <Admin key={view} embedded initialTab={view} />
+      )}
+      {!loading &&
+        !loadError &&
+        [
+          'tasks',
+          'clients',
+          'bookings',
+          'inquiries',
+          'staff',
+          'faq',
+          'audit',
+          'video',
+        ].includes(view) &&
+        !data.items?.length && (
+          <div className="crm-empty">
+            <h2>{t('No records yet')}</h2>
+            <p>{t('Change filters or add a record to get started.')}</p>
+          </div>
+        )}
       {view === 'dashboard' && (
         <div className="workspace-metrics">
           {[
             ['newBookings', 'New bookings'],
             ['upcoming', 'Upcoming'],
-            ['today', 'Today'],
+            ['today', 'Tasks today'],
             ['overdue', 'Overdue'],
             ['clients', 'Clients'],
             ['unassigned', 'Unassigned'],
@@ -346,12 +376,58 @@ export default function Workspace({ actor }: { actor: Actor }) {
           ))}
         </div>
       )}
+      {view === 'dashboard' && !loading && !loadError && (
+        <>
+          <p className="crm-asof">
+            {t('Updated')}: {data.asOf ? date(data.asOf) : '—'} · Europe/Riga
+          </p>
+          <div className="crm-dashboard-lists">
+            {[
+              ['nextBookings', 'Upcoming consultations', 'bookings'],
+              ['dueTasks', 'Due tasks', 'tasks'],
+            ].map(([key, label, target]) => (
+              <section className="admin-card" key={key}>
+                <div className="workspace-task-top">
+                  <h2>{t(label)}</h2>
+                  <button
+                    className="button secondary small"
+                    onClick={() => {
+                      setView(target);
+                      setData({});
+                    }}
+                  >
+                    {t('View all')}
+                  </button>
+                </div>
+                {!(data[key] as Row[] | undefined)?.length ? (
+                  <p>{t('No records yet')}</p>
+                ) : (
+                  <ul className="crm-agenda">
+                    {(data[key] as Row[]).map((row) => (
+                      <li key={str(row, 'id')}>
+                        <strong>
+                          {str(row, key === 'nextBookings' ? 'name' : 'title')}
+                        </strong>
+                        <span>{date(row.start ?? row.dueAt)}</span>
+                        <span className="crm-badge">
+                          {t(str(row, 'status'))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ))}
+          </div>
+        </>
+      )}
       {view === 'calendar' && (
-        <WorkspaceCalendar
+        <CrmCalendar
           t={t}
           locale={locale}
           staff={staffOptions}
           revision={revision}
+          onSave={save}
         />
       )}
       {['tasks', 'clients', 'bookings', 'inquiries'].includes(view) && (
@@ -1140,7 +1216,7 @@ export default function Workspace({ actor }: { actor: Actor }) {
           </form>
         </section>
       )}
-    </main>
+    </CrmShell>
   );
 }
 function TaskHistory({ id, t }: { id: string; t: (s: string) => string }) {
@@ -1163,139 +1239,5 @@ function TaskHistory({ id, t }: { id: string; t: (s: string) => string }) {
         </p>
       ))}
     </details>
-  );
-}
-function WorkspaceCalendar({
-  t,
-  locale,
-  staff,
-  revision,
-}: {
-  t: (s: string) => string;
-  locale: string;
-  staff: { id: string; name: string }[];
-  revision: number;
-}) {
-  const [month, setMonth] = useState(
-      formatInTimeZone(new Date(), 'Europe/Riga', 'yyyy-MM'),
-    ),
-    [kind, setKind] = useState('tasks'),
-    [staffId, setStaff] = useState(''),
-    [counts, setCounts] = useState<Record<string, number>>({}),
-    [day, setDay] = useState(
-      formatInTimeZone(new Date(), 'Europe/Riga', 'yyyy-MM-dd'),
-    ),
-    [rows, setRows] = useState<Row[]>([]),
-    [error, setError] = useState(false);
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(
-      `/api/workspace?view=calendar&month=${month}&kind=${kind}${staffId ? `&staffId=${staffId}` : ''}`,
-      { signal: controller.signal },
-    )
-      .then(async (r) => {
-        if (!r.ok) throw Error();
-        return r.json();
-      })
-      .then((d) => {
-        setCounts(d.dates);
-        setError(false);
-      })
-      .catch((e) => {
-        if (e.name !== 'AbortError') setError(true);
-      });
-    return () => controller.abort();
-  }, [month, kind, staffId, revision]);
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(
-      `/api/workspace?view=${kind}&day=${day}${staffId ? `&staffId=${staffId}` : ''}`,
-      { signal: controller.signal },
-    )
-      .then((r) => r.json())
-      .then((d) => setRows(d.items ?? []))
-      .catch(() => {});
-    return () => controller.abort();
-  }, [kind, day, staffId, revision]);
-  const first = new Date(`${month}-01T12:00Z`),
-    length = new Date(
-      Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
-    ).getUTCDate(),
-    offset = (first.getUTCDay() + 6) % 7;
-  return (
-    <section className="admin-card">
-      <div className="workspace-toolbar">
-        <label>
-          {t('Calendar')}
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => {
-              setMonth(e.target.value);
-              setDay(e.target.value + '-01');
-            }}
-          />
-        </label>
-        <label>
-          {t('Category')}
-          <select value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="tasks">{t('Tasks')}</option>
-            <option value="bookings">{t('Bookings')}</option>
-          </select>
-        </label>
-        <label>
-          {t('Assignee')}
-          <select value={staffId} onChange={(e) => setStaff(e.target.value)}>
-            <option value="">—</option>
-            {staff.map((s) => (
-              <option value={s.id} key={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {error && <p role="alert">{t('Request failed')}</p>}
-      <div className="planner-calendar">
-        {Array.from({ length: 7 }, (_, i) => (
-          <strong key={i}>
-            {new Intl.DateTimeFormat(locale, {
-              weekday: 'short',
-              timeZone: 'UTC',
-            }).format(new Date(Date.UTC(2026, 0, 5 + i)))}
-          </strong>
-        ))}
-        {Array.from({ length: offset }, (_, i) => (
-          <span key={`offset${i}`} />
-        ))}
-        {Array.from({ length }, (_, i) => {
-          const date = `${month}-${String(i + 1).padStart(2, '0')}`;
-          return (
-            <button
-              className={day === date ? 'selected' : ''}
-              key={date}
-              onClick={() => setDay(date)}
-              aria-pressed={day === date}
-            >
-              {i + 1}
-              <small>{counts[date] ?? 0}</small>
-            </button>
-          );
-        })}
-      </div>
-      <h3>{day}</h3>
-      {rows.map((r) => (
-        <article className="workspace-task" key={str(r, 'id')}>
-          <strong>{kind === 'tasks' ? str(r, 'title') : str(r, 'name')}</strong>
-          <p>
-            {t(str(r, 'status'))} ·{' '}
-            {new Intl.DateTimeFormat(locale, {
-              timeStyle: 'short',
-              timeZone: 'Europe/Riga',
-            }).format(new Date(str(r, kind === 'tasks' ? 'dueAt' : 'start')))}
-          </p>
-        </article>
-      ))}
-    </section>
   );
 }

@@ -21,6 +21,7 @@ import { chooseAssignee } from './planner';
 import { notify } from './notifications';
 import { bookingStatus, rescheduleBooking } from '../bookings';
 import { scheduleInput } from '../validation';
+import { calendarRange } from './crm-calendar';
 const nullableId = z.uuid().nullable().optional();
 const clientInput = z.object({
   id: z.uuid().optional(),
@@ -234,7 +235,34 @@ export async function workspaceData(actor: Actor, search: URLSearchParams) {
         ? db.outbox.count({ where: { failedAt: { not: null } } })
         : 0,
     ]);
+    const [nextBookings, dueTasks] = await Promise.all([
+      db.booking.findMany({
+        where: {
+          AND: [
+            bookingScope(actor),
+            { start: { gte: now }, status: { in: ['PENDING', 'CONFIRMED'] } },
+          ],
+        },
+        select: { id: true, name: true, start: true, status: true },
+        orderBy: { start: 'asc' },
+        take: 5,
+      }),
+      db.task.findMany({
+        where: {
+          AND: [
+            taskScope(actor),
+            { dueAt: { lt: dayEnd }, status: { in: ['TODO', 'IN_PROGRESS'] } },
+          ],
+        },
+        select: { id: true, title: true, dueAt: true, status: true },
+        orderBy: { dueAt: 'asc' },
+        take: 5,
+      }),
+    ]);
     return {
+      nextBookings,
+      dueTasks,
+      asOf: now.toISOString(),
       newBookings,
       upcoming,
       today,
@@ -246,55 +274,108 @@ export async function workspaceData(actor: Actor, search: URLSearchParams) {
     };
   }
   if (view === 'calendar') {
-    const month = z
-      .string()
-      .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-      .parse(search.get('month'));
+    const anchor = z.iso
+      .date()
+      .parse(search.get('date') ?? `${search.get('month')}-01`);
+    const mode = z
+      .enum(['day', 'week', 'month'])
+      .parse(search.get('mode') ?? 'month');
     const kind = z
       .enum(['tasks', 'bookings'])
-      .parse(search.get('kind') ?? 'tasks');
-    const from = new Date(`${month}-01T00:00Z`),
-      to = new Date(from);
-    to.setUTCMonth(to.getUTCMonth() + 1);
-    const bounds = {
-      gte: new Date(from.getTime() - 86400000),
-      lt: new Date(to.getTime() + 86400000),
-    };
-    const rows =
+      .parse(search.get('kind') ?? 'bookings');
+    const range = calendarRange(anchor, mode);
+    const staffWhere = staffFilter
+      ? kind === 'tasks'
+        ? { assignedId: staffFilter }
+        : { staffId: staffFilter }
+      : {};
+    const items =
       kind === 'tasks'
         ? await db.task.findMany({
             where: {
               AND: [
                 taskScope(actor),
-                staffFilter ? { assignedId: staffFilter } : {},
-                { dueAt: bounds },
+                staffWhere,
+                { dueAt: { gte: range.start, lt: range.end } },
+                status
+                  ? {
+                      status: z
+                        .enum(['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED'])
+                        .parse(status),
+                    }
+                  : {},
               ],
             },
-            select: { dueAt: true },
-            take: 10001,
+            select: {
+              id: true,
+              title: true,
+              dueAt: true,
+              status: true,
+              priority: true,
+              version: true,
+              assigned: { select: { name: true } },
+            },
+            orderBy: [{ dueAt: 'asc' }, { id: 'asc' }],
+            take: 501,
           })
         : await db.booking.findMany({
             where: {
               AND: [
                 bookingScope(actor),
-                staffFilter ? { staffId: staffFilter } : {},
-                { start: bounds, status: { in: ['PENDING', 'CONFIRMED'] } },
+                staffWhere,
+                { start: { lt: range.end }, end: { gt: range.start } },
+                status
+                  ? {
+                      status: z
+                        .enum([
+                          'PENDING',
+                          'CONFIRMED',
+                          'COMPLETED',
+                          'CANCELLED',
+                        ])
+                        .parse(status),
+                    }
+                  : {},
               ],
             },
-            select: { start: true },
-            take: 10001,
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              comment: true,
+              start: true,
+              end: true,
+              status: true,
+              format: true,
+              version: true,
+              serviceId: true,
+              service: { select: { translations: true } },
+              staff: { select: { name: true } },
+            },
+            orderBy: [{ start: 'asc' }, { id: 'asc' }],
+            take: 501,
           });
-    if (rows.length > 10000) throw Error('INVALID');
+    const truncated = items.length > 500;
+    const visible = items.slice(0, 500);
     const dates: Record<string, number> = {};
-    for (const row of rows) {
+    for (const row of visible) {
       const key = formatInTimeZone(
         'dueAt' in row ? row.dueAt : row.start,
         'Europe/Riga',
         'yyyy-MM-dd',
       );
-      if (key.startsWith(month)) dates[key] = (dates[key] ?? 0) + 1;
+      dates[key] = (dates[key] ?? 0) + 1;
     }
-    return { dates };
+    return {
+      items: visible,
+      dates,
+      days: range.days,
+      start: range.start,
+      end: range.end,
+      truncated,
+      timezone: 'Europe/Riga',
+    };
   }
   if (view === 'inquiries') {
     const where = manager(actor) ? {} : { assignedId: actor.id };
