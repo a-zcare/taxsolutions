@@ -96,6 +96,7 @@ export default function Admin() {
           {t('Sign out')}
         </button>
       </header>
+      <a className="button secondary small" href="/workspace">CRM / Planner →</a>
       <div className="admin-intro">
         <p className="section-label">{t('WORKSPACE')}</p>
         <h1>{t('Business overview')}</h1>

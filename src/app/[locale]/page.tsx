@@ -24,6 +24,8 @@ import type { Translations } from '@/lib/defaults';
 import Header, { Logo } from '@/components/Header';
 import BookingForm from '@/components/BookingForm';
 import ContactForm from '@/components/ContactForm';
+import FaqSearch from '@/components/FaqSearch';
+import {approvedFaq} from '@/lib/v2/faq';
 export const dynamic = 'force-dynamic';
 export async function generateMetadata({
   params,
@@ -78,6 +80,7 @@ export default async function Page({
     ...s,
     translations: s.translations as Translations,
   }));
+  const faqItems=await approvedFaq(locale,c);
   return (
     <>
       <a className="skip-link" href="#main">
@@ -271,18 +274,7 @@ export default async function Page({
             <p className="section-label">05 / {c.nav[4]}</p>
             <h2>{c.faqTitle}</h2>
           </div>
-          <div>
-            {c.faq.map(([q, a], i) => (
-              <details className="faq-item" key={q}>
-                <summary>
-                  <span className="faq-number">0{i + 1}</span>
-                  {q}
-                  <span className="faq-plus">+</span>
-                </summary>
-                <p>{a}</p>
-              </details>
-            ))}
-          </div>
+          <FaqSearch items={faqItems} locale={locale} bookLabel={c.book}/>
         </section>
         <section id="contact" className="section pale">
           <div className="container contact-grid">
@@ -305,7 +297,7 @@ export default async function Page({
                 </p>
               </div>
             </div>
-            <ContactForm c={c} locale={locale} configured={Boolean(contact.email)} />
+            <ContactForm c={c} locale={locale} configured={true} />
           </div>
         </section>
       </main>

@@ -1,0 +1,11 @@
+# Apply after compose.production.yaml with a separate project name and env file.
+services:
+  app:
+    environment:
+      APP_ENV: staging
+  worker:
+    environment:
+      APP_ENV: staging
+  caddy:
+    volumes:
+      - ./Caddyfile.staging:/etc/caddy/Caddyfile:ro

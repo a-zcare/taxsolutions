@@ -9,3 +9,7 @@ test-results
 
 *.tsbuildinfo
 .pages-build
+
+dist
+backup-ssh
+**/backup-ssh

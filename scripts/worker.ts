@@ -1,5 +1,7 @@
 import { deliverMail } from '../src/lib/mail';
 import { db } from '../src/lib/db';
+import { maintainPlatform } from '../src/lib/v2/maintenance';
+import { processVideoJob } from '../src/lib/video/worker';
 let stopping = false;
 process.on('SIGTERM', () => {
   stopping = true;
@@ -9,22 +11,14 @@ process.on('SIGINT', () => {
 });
 while (!stopping) {
   try {
+    await maintainPlatform();
+    await processVideoJob();
     await deliverMail();
-    await db.booking.deleteMany({
-      where: { end: { lt: new Date(Date.now() - 180 * 86400000) } },
-    });
-    await db.outbox.deleteMany({
-      where: {
-        OR: [
-          { sentAt: { lt: new Date(Date.now() - 30 * 86400000) } },
-          { createdAt: { lt: new Date(Date.now() - 180 * 86400000) } },
-        ],
-      },
-    });
-    await db.rateLimit.deleteMany({ where: { expiresAt: { lt: new Date() } } });
   } catch {
-    console.error('Worker cycle failed; retrying. No personal data logged.');
+    console.error(
+      'Worker cycle failed; retrying. Personal data and credentials omitted.',
+    );
   }
-  await new Promise((r) => setTimeout(r, 5000));
+  if (!stopping) await new Promise((r) => setTimeout(r, 5000));
 }
 await db.$disconnect();

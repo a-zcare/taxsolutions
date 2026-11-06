@@ -14,7 +14,7 @@ export async function deliverMail() {
           text: string;
           attempts: number;
         }[]
-      >`SELECT * FROM "Outbox" WHERE "sentAt" IS NULL AND "nextAttempt"<=now() ORDER BY "createdAt" LIMIT 10 FOR UPDATE SKIP LOCKED`;
+      >`SELECT * FROM "Outbox" WHERE "sentAt" IS NULL AND "failedAt" IS NULL AND attempts<8 AND "nextAttempt"<=now() ORDER BY "createdAt" LIMIT 10 FOR UPDATE SKIP LOCKED`;
       const transport = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: Number(process.env.SMTP_PORT ?? 587),
@@ -44,6 +44,7 @@ export async function deliverMail() {
             where: { id: row.id },
             data: {
               attempts: { increment: 1 },
+              failedAt: row.attempts >= 7 ? new Date() : null,
               nextAttempt: new Date(
                 Date.now() +
                   Math.min(1440, 2 ** Math.min(row.attempts, 10)) * 60000,

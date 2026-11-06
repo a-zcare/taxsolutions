@@ -19,10 +19,12 @@ const files = await walk(root),
 let links = 0;
 for (const file of html) {
   const text = await readFile(file, 'utf8');
-  assert(
-    !/<form\b|<input\b|<textarea\b/i.test(text),
-    `Live form leaked into ${file}`,
-  );
+  assert(!/<form\b|<textarea\b/i.test(text), `Live form leaked into ${file}`);
+  for (const input of text.matchAll(/<input\b[^>]*>/g))
+    assert(
+      input[0].includes('type="search"'),
+      `Data collection input in ${file}`,
+    );
   for (const tag of text.matchAll(/<(?:a|link|script|img)\b[^>]*>/g)) {
     const attr = tag[0].match(/\b(?:href|src)="([^"]+)"/);
     if (!attr) continue;

@@ -1,35 +1,24 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { schedule } from '@/lib/content';
-import { slotsForDay } from '@/lib/calendar';
+import { availableSlots } from '@/lib/v2/availability';
 import { failure } from '@/lib/http';
 import { rateLimit } from '@/lib/security';
+import { z } from 'zod';
 export async function GET(req: Request) {
   try {
     await rateLimit('availability', 600);
-    const url = new URL(req.url),
-      date = url.searchParams.get('date') ?? '',
-      id = url.searchParams.get('serviceId') ?? '';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('INVALID');
-    const service = await db.service.findUnique({ where: { id } });
-    if (!service?.active) throw new Error('INVALID');
-    const range = new Date(`${date}T00:00:00Z`);
-    if (!Number.isFinite(range.getTime())) throw new Error('INVALID');
-    const [rules, busy] = await Promise.all([
-      schedule(),
-      db.booking.findMany({
-        where: {
-          status: { in: ['PENDING', 'CONFIRMED'] },
-          start: {
-            gte: new Date(range.getTime() - 86400000),
-            lt: new Date(range.getTime() + 2 * 86400000),
-          },
-        },
-        select: { start: true, end: true },
-      }),
-    ]);
+    const u = new URL(req.url),
+      date = z.iso.date().parse(u.searchParams.get('date')),
+      serviceId = z
+        .string()
+        .min(1)
+        .max(80)
+        .parse(u.searchParams.get('serviceId')),
+      staffId = z
+        .uuid()
+        .optional()
+        .parse(u.searchParams.get('staffId') || undefined);
     return NextResponse.json(
-      { slots: slotsForDay(date, service.duration, rules, busy) },
+      { slots: await availableSlots(date, serviceId, staffId) },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (e) {

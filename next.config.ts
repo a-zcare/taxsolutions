@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 const config: NextConfig = {
   poweredByHeader: false,
+  ...(process.env.NEXT_STANDALONE==='true'?{output:'standalone' as const}:{}),
   async headers() {
     return [
       {

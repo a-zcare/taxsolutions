@@ -37,6 +37,10 @@ jobs:
       SMTP_PORT: '1025'
       SMTP_FROM: 'TaxSolutions <test@example.invalid>'
       NEXT_TELEMETRY_DISABLED: '1'
+      APP_ENV: test
+      ENABLE_MOCK_VIDEO: 'true'
+      DATA_ENCRYPTION_KEY: KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio=
+      TEST_TOTP_SECRET: JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -46,19 +50,15 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npm run db:migrate && npm run db:seed
-      - name: Configure isolated test administrator
-        run: |
-          node --input-type=module - <<'JS'
-          import fs from 'node:fs';
-          import bcrypt from 'bcryptjs';
-          const hash=Buffer.from(await bcrypt.hash(process.env.TEST_ADMIN_PASSWORD,12)).toString('base64');
-          fs.appendFileSync(process.env.GITHUB_ENV,`ADMIN_PASSWORD_HASH_B64=${hash}\n`);
-          JS
+      - run: node --import tsx scripts/test-fixtures.ts
       - run: npm run lint
       - run: npm test
       - run: npm run typecheck
       - run: npm run test:integration
+      - run: npm run test:platform
+      - run: npm run test:migrations
       - run: npm run build
+      - run: npm run build:worker && node --import tsx tests/worker-runtime.ts
       - name: Use preinstalled Chrome
         run: google-chrome --version
       - run: npm run test:e2e

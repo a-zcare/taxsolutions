@@ -1,0 +1,14 @@
+{
+  email {$ACME_EMAIL}
+}
+{$DOMAIN} {
+  encode zstd gzip
+  header X-Robots-Tag "noindex, nofollow"
+  header Referrer-Policy "no-referrer"
+  request_body {
+    max_size 32KB
+  }
+  reverse_proxy app:3000 {
+    header_up X-Real-IP {remote_host}
+  }
+}

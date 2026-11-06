@@ -20,6 +20,7 @@ export default function Login() {
               body: JSON.stringify({
                 email: f.get('email'),
                 password: f.get('password'),
+                code: f.get('code'),
               }),
             });
             if (r.ok) window.location.reload();
@@ -57,6 +58,18 @@ export default function Login() {
             required
             maxLength={200}
             autoComplete="current-password"
+          />
+        </label>
+        <label>
+          {t('Authenticator code')}
+          <input
+            name="code"
+            inputMode="numeric"
+            pattern="[0-9]{6}"
+            minLength={6}
+            maxLength={6}
+            autoComplete="one-time-code"
+            required
           />
         </label>
         <button className="button" disabled={pending}>

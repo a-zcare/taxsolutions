@@ -121,6 +121,8 @@ export const defaultServices = [
   },
 ];
 export const defaultSchedule = {
+  bufferMinutes: 0,
+  breaks: [] as { start: string; end: string }[],
   start: 9,
   end: 17,
   weekdays: [1, 2, 3, 4, 5],

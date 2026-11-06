@@ -1,0 +1,10 @@
+[Unit]
+Description=TaxSolutions encrypted off-host backup
+After=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/taxsolutions
+ExecStart=/usr/bin/docker compose --env-file .env.production -f deploy/compose.production.yaml run --rm backup
+User=root
+UMask=0077
+NoNewPrivileges=true

@@ -3,6 +3,18 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { Locale } from '@/lib/i18n';
 import ThemeToggle from './ThemeToggle';
 const translations: Record<string, Partial<Record<Locale, string>>> = {
+  'Buffer minutes': {
+    lv: 'Buferis pirms un pēc konsultācijas (minūtes)',
+    ru: 'Буфер до и после консультации (минуты)',
+  },
+  'Daily breaks': { lv: 'Ikdienas pārtraukumi', ru: 'Ежедневные перерывы' },
+  'Break start': { lv: 'Pārtraukuma sākums', ru: 'Начало перерыва' },
+  'Break end': { lv: 'Pārtraukuma beigas', ru: 'Конец перерыва' },
+  'Add break': { lv: 'Pievienot pārtraukumu', ru: 'Добавить перерыв' },
+  'Authenticator code': {
+    lv: 'Autentifikatora kods',
+    ru: 'Код аутентификатора',
+  },
   'Existing appointments remain valid. Closed dates take priority.': {
     lv: 'Esošie pieraksti paliek spēkā. Slēgtām dienām ir prioritāte.',
     ru: 'Существующие записи сохраняются. Закрытые даты имеют приоритет.',

@@ -6,7 +6,8 @@ import { serviceInput, scheduleInput, contactsInput } from '@/lib/validation';
 import { z } from 'zod';
 import { copy } from '@/lib/i18n';
 import type { Prisma } from '@prisma/client';
-import { formatInTimeZone } from 'date-fns-tz';
+import { audit } from '@/lib/v2/audit';
+import { bookingStatus } from '@/lib/bookings';
 export async function GET(req: Request) {
   try {
     await requireAdmin();
@@ -84,7 +85,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await sameOrigin();
-    await requireAdmin();
+    const actor = await requireAdmin();
     const v = z
       .object({
         action: z.enum([
@@ -97,100 +98,99 @@ export async function POST(req: Request) {
         data: z.unknown(),
       })
       .parse(await json(req));
-    if (v.action === 'status') {
-      const data = z
-        .object({
-          id: z.uuid(),
-          status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED']),
-        })
-        .parse(v.data);
-      await db.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(740217)`;
-        const b = await tx.booking.findUniqueOrThrow({
-          where: { id: data.id },
-        });
-        if (b.status === 'CANCELLED' && data.status !== 'CANCELLED')
-          throw new Error('INVALID');
-        if (data.status === 'COMPLETED' && b.end > new Date())
-          throw new Error('INVALID');
-        await tx.booking.update({
-          where: { id: data.id },
-          data: { status: data.status },
-        });
-        if (b.status !== data.status)
-          await tx.outbox.create({
-            data: {
-              to: b.email,
-              subject: 'TaxSolutions',
-              text: `${copy[b.locale as keyof typeof copy].nav[3]}: ${formatInTimeZone(b.start, 'Europe/Riga', 'dd.MM.yyyy HH:mm')} (Europe/Riga)\n${{ lv: { PENDING: 'Gaida apstiprinājumu', CONFIRMED: 'Apstiprināts', CANCELLED: 'Atcelts', COMPLETED: 'Pabeigts' }, en: { PENDING: 'Pending', CONFIRMED: 'Confirmed', CANCELLED: 'Cancelled', COMPLETED: 'Completed' }, ru: { PENDING: 'Ожидает подтверждения', CONFIRMED: 'Подтверждено', CANCELLED: 'Отменено', COMPLETED: 'Завершено' } }[b.locale as 'lv' | 'en' | 'ru'][data.status]}`,
-            },
-          });
-      });
-    }
-    if (v.action === 'service') {
-      const data = serviceInput.parse(v.data);
-      await db.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(740217)`;
+    await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(740217)`;
+      if (v.action === 'status') {
+        const data = z
+          .object({
+            id: z.uuid(),
+            status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED']),
+          })
+          .parse(v.data);
+        await bookingStatus(tx, actor, data.id, data.status);
+        return;
+      }
+      if (v.action === 'service') {
+        const data = serviceInput.parse(v.data);
         await tx.service.upsert({
           where: { id: data.id },
           create: data,
           update: data,
         });
-      });
-    }
-    if (v.action === 'schedule') {
-      const data = scheduleInput.parse(v.data);
-      await db.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(740217)`;
+        await audit(
+          tx,
+          actor,
+          'SERVICE_UPDATE',
+          'Service',
+          data.id,
+          Object.keys(data),
+        );
+        return;
+      }
+      if (v.action === 'schedule' || v.action === 'contacts') {
+        const data =
+          v.action === 'schedule'
+            ? scheduleInput.parse(v.data)
+            : contactsInput.parse(v.data);
         await tx.setting.upsert({
-          where: { key: 'schedule' },
-          create: { key: 'schedule', value: data },
+          where: { key: v.action },
+          create: { key: v.action, value: data },
           update: { value: data },
         });
-      });
-    }
-    if (v.action === 'contacts') {
-      const data = contactsInput.parse(v.data);
-      await db.setting.upsert({
-        where: { key: 'contacts' },
-        create: { key: 'contacts', value: data },
-        update: { value: data },
-      });
-    }
-    if (v.action === 'content') {
-      const { locale, value } = z
-        .object({
-          locale: z.enum(['lv', 'en', 'ru']),
-          value: z.record(z.string(), z.unknown()),
-        })
-        .parse(v.data);
-      const defaults = copy[locale];
-      if (Object.keys(value).some((k) => !(k in defaults)))
-        throw new Error('INVALID');
-      for (const [key, val] of Object.entries(value)) {
-        const original = defaults[key as keyof typeof defaults];
-        if (typeof original === 'string') {
-          if (typeof val !== 'string' || val.length > 15000)
-            throw new Error('INVALID');
-        } else if (
-          !Array.isArray(val) ||
-          val.length !== original.length ||
-          val.some((x, i) =>
-            typeof original[i] === 'string'
-              ? typeof x !== 'string'
-              : !Array.isArray(x) ||
-                x.length !== 2 ||
-                x.some((y) => typeof y !== 'string'),
-          )
-        )
-          throw new Error('INVALID');
+        await audit(
+          tx,
+          actor,
+          'SETTING_UPDATE',
+          'Setting',
+          v.action,
+          Object.keys(data),
+        );
+        return;
       }
-      await db.setting.upsert({
-        where: { key: `content.${locale}` },
-        create: { key: `content.${locale}`, value: value as never },
-        update: { value: value as never },
-      });
-    }
+      if (v.action === 'content') {
+        const { locale, value } = z
+          .object({
+            locale: z.enum(['lv', 'en', 'ru']),
+            value: z.record(z.string(), z.unknown()),
+          })
+          .parse(v.data);
+        const defaults = copy[locale];
+        if (Object.keys(value).some((k) => !(k in defaults)))
+          throw new Error('INVALID');
+        for (const [key, val] of Object.entries(value)) {
+          const original = defaults[key as keyof typeof defaults];
+          if (typeof original === 'string') {
+            if (typeof val !== 'string' || val.length > 15000)
+              throw new Error('INVALID');
+          } else if (
+            !Array.isArray(val) ||
+            val.length !== original.length ||
+            val.some((x, i) =>
+              typeof original[i] === 'string'
+                ? typeof x !== 'string'
+                : !Array.isArray(x) ||
+                  x.length !== 2 ||
+                  x.some((y) => typeof y !== 'string'),
+            )
+          )
+            throw new Error('INVALID');
+        }
+
+        await tx.setting.upsert({
+          where: { key: `content.${locale}` },
+          create: { key: `content.${locale}`, value: value as never },
+          update: { value: value as never },
+        });
+        await audit(
+          tx,
+          actor,
+          'CONTENT_UPDATE',
+          'Setting',
+          `content.${locale}`,
+          Object.keys(value),
+        );
+      }
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     return failure(e);
