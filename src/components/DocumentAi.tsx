@@ -1,138 +1,349 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { maxDocumentBytes } from '@/lib/document-ai-options';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { maxDocumentBytes, type DocumentPage } from '@/lib/document-ai-options';
+import {
+  captureFields,
+  defaultFieldSettings,
+  detectDocumentType,
+  documentTypes,
+  fieldLabel,
+  readFieldSettings,
+  visibleFields,
+  type DocumentType,
+  type FieldSettings,
+} from '@/lib/document-ai-fields';
 import { useAdminLanguage } from './AdminLanguage';
+import DocumentFieldSettings from './DocumentFieldSettings';
+import { documentAiCopy } from './document-ai-copy';
 
-type Page = { number: number; source: 'embedded' | 'ocr'; text: string };
-
-const copy = {
-  lv: {
-    intro:
-      'Atpazīstiet tekstu PDF dokumentos un JPG vai PNG attēlos. Fails un rezultāts netiek saglabāti CRM.',
-    file: 'Dokuments (līdz 10 MB, PDF līdz 12 lapām)',
-    language: 'Dokumenta valoda',
-    mixed: 'Latviešu, angļu un krievu',
-    run: 'Atpazīt tekstu',
-    busy: 'Notiek teksta atpazīšana…',
-    download: 'Lejupielādēt tekstu (.txt)',
-    review:
-      'Pirms izmantošanas pārbaudiet summas, datumus un reģistrācijas numurus.',
-    page: 'Lapa',
-    embedded: 'PDF teksta slānis',
-    empty: 'Teksts nav atrasts.',
-    large: 'Izvēlieties failu līdz 10 MB.',
-    many: 'PDF failā drīkst būt līdz 12 lapām.',
-    unsupported: 'Izvēlieties PDF, JPG vai PNG failu.',
-    failed: 'Dokumentu neizdevās nolasīt.',
-    unavailable: 'OCR dzinējs nav pieejams. Sazinieties ar administratoru.',
-    retry: 'Mēģiniet vēlreiz pēc brīža.',
-    timeout:
-      'Atpazīšana pārsniedza laika ierobežojumu. Sadaliet dokumentu mazākās daļās.',
-  },
-  en: {
-    intro:
-      'Extract text from PDFs and JPG or PNG images. The CRM does not store the file or result.',
-    file: 'Document (up to 10 MB, PDF up to 12 pages)',
-    language: 'Document language',
-    mixed: 'Latvian, English and Russian',
-    run: 'Extract text',
-    busy: 'Recognizing text…',
-    download: 'Download text (.txt)',
-    review:
-      'Verify amounts, dates and registration numbers before using the text.',
-    page: 'Page',
-    embedded: 'PDF text layer',
-    empty: 'No text found.',
-    large: 'Choose a file up to 10 MB.',
-    many: 'Choose a PDF with up to 12 pages.',
-    unsupported: 'Choose a PDF, JPG or PNG file.',
-    failed: 'Could not read the document.',
-    unavailable: 'The OCR engine is unavailable. Contact your administrator.',
-    retry: 'Try again in a moment.',
-    timeout: 'Recognition timed out. Split the document into smaller parts.',
-  },
-  ru: {
-    intro:
-      'Извлекает текст из PDF и изображений JPG или PNG. Файл и результат не сохраняются в CRM.',
-    file: 'Документ (до 10 МБ, PDF до 12 страниц)',
-    language: 'Язык документа',
-    mixed: 'Латышский, английский и русский',
-    run: 'Распознать текст',
-    busy: 'Распознаём текст…',
-    download: 'Скачать текст (.txt)',
-    review:
-      'Перед использованием сверьте суммы, даты и регистрационные номера.',
-    page: 'Страница',
-    embedded: 'Текстовый слой PDF',
-    empty: 'Текст не найден.',
-    large: 'Выберите файл размером до 10 МБ.',
-    many: 'Выберите PDF до 12 страниц.',
-    unsupported: 'Выберите файл PDF, JPG или PNG.',
-    failed: 'Не удалось прочитать документ.',
-    unavailable: 'OCR недоступен. Обратитесь к администратору.',
-    retry: 'Повторите попытку через минуту.',
-    timeout: 'Время распознавания истекло. Разделите документ на части.',
-  },
+type DocumentEntry = {
+  id: string;
+  file: File;
+  status: 'queued' | 'reading' | 'ready' | 'error';
+  type: DocumentType;
+  pages: DocumentPage[];
+  edits: Record<string, string>;
+  suggestions: Record<string, string>;
+  error?: string;
+  reviewEnabled?: boolean;
+  reviewError?: boolean;
 };
+const endpoint = '/api/workspace/document-ai';
+const maxFiles = 20;
+const rawHeaders = { 'Content-Type': 'application/octet-stream' };
 
-export default function DocumentAi() {
+async function documentRequest(
+  file: File,
+  query: URLSearchParams,
+  signal: AbortSignal,
+  fields?: string,
+) {
+  const response = await fetch(`${endpoint}?${query}`, {
+    method: 'POST',
+    headers: fields
+      ? { ...rawHeaders, 'X-Document-Fields': fields }
+      : rawHeaders,
+    body: file,
+    signal,
+  });
+  if (response.status === 413) throw Error('TOO_LARGE');
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw Error(result.error ?? 'UNREADABLE');
+  }
+  return response;
+}
+
+function DocumentPreview({
+  entry,
+  number,
+}: {
+  entry: DocumentEntry;
+  number: number;
+}) {
   const { locale } = useAdminLanguage();
-  const t = copy[locale];
-  const [pages, setPages] = useState<Page[]>([]);
+  const t = documentAiCopy[locale];
+  const [image, setImage] = useState('');
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let url = '';
+    async function load() {
+      try {
+        const file = entry.file;
+        const image =
+          /\.pdf$/i.test(file.name) || file.type === 'application/pdf'
+            ? await (
+                await documentRequest(
+                  file,
+                  new URLSearchParams({
+                    action: 'preview',
+                    page: String(number),
+                  }),
+                  controller.signal,
+                )
+              ).blob()
+            : file;
+        if (controller.signal.aborted) return;
+        url = URL.createObjectURL(image);
+        setImage(url);
+      } catch {
+        if (!controller.signal.aborted) setError(true);
+      }
+    }
+    void load();
+    return () => {
+      controller.abort();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [entry.file, number, attempt]);
+
+  return (
+    <div className="document-preview">
+      {image && !error && (
+        // eslint-disable-next-line @next/next/no-img-element -- Preview is a private, temporary browser blob.
+        <img
+          src={image}
+          alt={`${entry.file.name} · ${t.page} ${number}`}
+          onError={() => setError(true)}
+        />
+      )}
+      {error && (
+        <div role="alert">
+          <p>{t.previewError}</p>
+          <button
+            type="button"
+            className="button secondary small"
+            onClick={() => {
+              setError(false);
+              setImage('');
+              setAttempt((current) => current + 1);
+            }}
+          >
+            {t.retry}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function DocumentAi({ staffId }: { staffId: string }) {
+  const { locale } = useAdminLanguage();
+  const t = documentAiCopy[locale];
+  const storageKey = 'taxsolutions-document-fields-' + staffId;
+  const [settings, setSettings] = useState(defaultFieldSettings);
+  const [entries, setEntries] = useState<DocumentEntry[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [page, setPage] = useState(1);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reviewing, setReviewing] = useState('');
   const active = useRef<AbortController | null>(null);
-  useEffect(() => () => active.current?.abort(), []);
+  useEffect(() => {
+    try {
+      setSettings(readFieldSettings(localStorage.getItem(storageKey)));
+    } catch {
+      setSettings(defaultFieldSettings);
+    }
+    return () => active.current?.abort();
+  }, [storageKey]);
+
+  const selected = entries.find((item) => item.id === selectedId);
+  const selectedType = selected?.type;
+  const selectedPages = selected?.pages;
+  const { keys, values } = useMemo(() => {
+    const keys = selectedType ? visibleFields(settings, selectedType) : [];
+    return {
+      keys,
+      values: selectedPages ? captureFields(selectedPages, keys, settings) : {},
+    };
+  }, [selectedType, selectedPages, settings]);
+  const currentPage = selected?.pages[page - 1];
+
+  function changeSettings(next: FieldSettings) {
+    setSettings(next);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {
+      // Settings remain usable for this session when browser storage is blocked.
+    }
+  }
+
+  function update(id: string, change: (entry: DocumentEntry) => DocumentEntry) {
+    setEntries((list) =>
+      list.map((item) => (item.id === id ? change(item) : item)),
+    );
+  }
+
+  async function review(
+    entry: DocumentEntry,
+    signal: AbortSignal,
+    preferredPage?: number,
+  ) {
+    const fields = captureFields(
+      entry.pages,
+      visibleFields(settings, entry.type),
+      settings,
+    );
+    const candidates = Object.entries(fields).filter(
+      ([key, value]) =>
+        value.uncertain &&
+        !Object.hasOwn(entry.edits, key) &&
+        !entry.suggestions[key],
+    );
+    const targets = preferredPage
+      ? [preferredPage]
+      : [...new Set(candidates.map(([, value]) => value.page))];
+    if (!candidates.length) return;
+    setReviewing(entry.id);
+    try {
+      for (const target of targets) {
+        const onPage = candidates.filter(
+          ([, value]) =>
+            value.page === target ||
+            (preferredPage !== undefined && !value.value),
+        );
+        for (let offset = 0; offset < onPage.length; offset += 6) {
+          const chosen = onPage.slice(offset, offset + 6);
+          const hints = chosen.map(([key, value]) => ({
+            label: fieldLabel(key, settings, locale),
+            value: value.value.slice(0, 60),
+          }));
+          const fields = btoa(
+            String.fromCharCode(
+              ...new TextEncoder().encode(JSON.stringify(hints)),
+            ),
+          );
+          const response = await documentRequest(
+            entry.file,
+            new URLSearchParams({ action: 'review', page: String(target) }),
+            signal,
+            fields,
+          );
+          const { values } = (await response.json()) as {
+            values: (string | null)[];
+          };
+          const suggestions = Object.fromEntries(
+            chosen.flatMap(([key], index) =>
+              values[index] ? [[key, values[index]]] : [],
+            ),
+          );
+          update(entry.id, (item) => ({
+            ...item,
+            suggestions: { ...item.suggestions, ...suggestions },
+            reviewError: false,
+          }));
+        }
+      }
+    } catch {
+      if (!signal.aborted)
+        update(entry.id, (item) => ({ ...item, reviewError: true }));
+    } finally {
+      if (!signal.aborted) setReviewing('');
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (active.current) return;
-    setPages([]);
     setError('');
-    const fields = new FormData(event.currentTarget);
-    const file = fields.get('document');
-    if (!(file instanceof File) || !file.size) {
-      setError('UNSUPPORTED_FILE');
-      return;
-    }
-    if (file.size > maxDocumentBytes) {
-      setError('TOO_LARGE');
-      return;
-    }
-    const language = encodeURIComponent(String(fields.get('language')));
+    const form = event.currentTarget;
+    const fields = new FormData(form);
+    const files = fields
+      .getAll('document')
+      .filter((file): file is File => file instanceof File && !!file.size);
+    if (!files.length) return setError('UNSUPPORTED_FILE');
+    if (files.some((file) => file.size > maxDocumentBytes))
+      return setError('TOO_LARGE');
+    if (entries.length + files.length > maxFiles) return setError('LIST_FULL');
+
+    const additions: DocumentEntry[] = files.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      status: 'queued',
+      type: 'other',
+      pages: [],
+      edits: {},
+      suggestions: {},
+    }));
     const controller = new AbortController();
     active.current = controller;
     setBusy(true);
+    setEntries((previous) => [...previous, ...additions]);
+    setSelectedId(additions[0].id);
+    setPage(1);
+    form.reset();
+    const language = String(fields.get('language'));
     try {
-      const response = await fetch(
-        `/api/workspace/document-ai?language=${language}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: file,
-          signal: controller.signal,
-        },
-      );
-      if (response.status === 413) {
-        setError('TOO_LARGE');
-        return;
+      for (const entry of additions) {
+        if (controller.signal.aborted) break;
+        update(entry.id, (item) => ({ ...item, status: 'reading' }));
+        try {
+          const result = await documentRequest(
+            entry.file,
+            new URLSearchParams({ language }),
+            controller.signal,
+          );
+          const { pages, reviewEnabled } = (await result.json()) as {
+            pages: DocumentPage[];
+            reviewEnabled: boolean;
+          };
+          const type = detectDocumentType(pages);
+          const ready = {
+            ...entry,
+            pages,
+            type,
+            reviewEnabled,
+            status: 'ready',
+          } as const;
+          update(entry.id, (item) => ({
+            ...item,
+            pages,
+            type,
+            reviewEnabled,
+            status: 'ready',
+          }));
+          if (reviewEnabled) await review(ready, controller.signal);
+        } catch (error) {
+          if (!controller.signal.aborted)
+            update(entry.id, (item) => ({
+              ...item,
+              status: 'error',
+              error: error instanceof Error ? error.message : 'UNREADABLE',
+            }));
+        }
       }
-      const result = await response.json();
-      if (response.ok) setPages(result.pages);
-      else setError(result.error);
-    } catch {
-      if (!controller.signal.aborted) setError('UNREADABLE');
     } finally {
       active.current = null;
       if (!controller.signal.aborted) setBusy(false);
     }
   }
 
-  function download() {
-    const text = pages
-      .map((page) => `${t.page} ${page.number}\n${page.text}`)
-      .join('\n\n');
+  async function recheck(entry: DocumentEntry) {
+    if (active.current) return;
+    const controller = new AbortController();
+    active.current = controller;
+    try {
+      await review(entry, controller.signal, page);
+    } finally {
+      active.current = null;
+    }
+  }
+
+  function download(entry: DocumentEntry) {
+    const fields = keys.map(
+      (key) =>
+        `${fieldLabel(key, settings, locale)}: ${entry.edits[key] ?? values[key].value}`,
+    );
+    const text = [
+      ...fields,
+      '',
+      ...entry.pages.map((page) => `${t.page} ${page.number}\n${page.text}`),
+    ].join('\n\n');
     const url = URL.createObjectURL(
       new Blob([text], { type: 'text/plain;charset=utf-8' }),
     );
@@ -151,70 +362,245 @@ export default function DocumentAi() {
     TIMEOUT: t.timeout,
     BUSY: t.retry,
     RATE: t.retry,
+    LIST_FULL: t.limit,
   };
 
   return (
-    <section className="admin-card">
-      <p>{t.intro}</p>
-      <form className="form-grid" onSubmit={submit}>
-        <label>
-          {t.file}
-          <input
-            name="document"
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
-            required
-            disabled={busy}
-            onChange={() => {
-              setPages([]);
-              setError('');
-            }}
-          />
-        </label>
-        <label>
-          {t.language}
-          <select name="language" defaultValue="auto" disabled={busy}>
-            <option value="auto">{t.mixed}</option>
-            <option value="lv">Latviešu</option>
-            <option value="en">English</option>
-            <option value="ru">Русский</option>
-          </select>
-        </label>
-        <div>
-          <button className="button small" disabled={busy}>
-            {t.run}
-          </button>
-        </div>
-      </form>
-      {busy && <p role="status">{t.busy}</p>}
-      {error && (
-        <p role="alert" className="crm-feedback error">
-          {errors[error] ?? t.failed}
-        </p>
-      )}
-      {!!pages.length && (
-        <>
-          {pages.some((page) => page.text) && (
-            <>
-              <p role="status">{t.review}</p>
+    <div className="document-workspace">
+      <section className="admin-card">
+        <p>{t.intro}</p>
+        <form className="form-grid" onSubmit={submit}>
+          <label>
+            {t.file}
+            <input
+              name="document"
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              multiple
+              required
+              disabled={busy || !!reviewing}
+            />
+          </label>
+          <label>
+            {t.language}
+            <select
+              name="language"
+              defaultValue="auto"
+              disabled={busy || !!reviewing}
+            >
+              <option value="auto">{t.mixed}</option>
+              <option value="lv">Latviešu</option>
+              <option value="en">English</option>
+              <option value="ru">Русский</option>
+            </select>
+          </label>
+          <div>
+            <button className="button small" disabled={busy || !!reviewing}>
+              {t.run}
+            </button>
+          </div>
+        </form>
+        {error && (
+          <p role="alert" className="crm-feedback error">
+            {errors[error] ?? t.failed}
+          </p>
+        )}
+      </section>
+      <DocumentFieldSettings settings={settings} change={changeSettings} />
+      <div className="document-layout">
+        <section className="admin-card document-file-list" aria-label={t.files}>
+          <h2>{t.files}</h2>
+          {entries.length === 0 && <p>{t.emptyList}</p>}
+          {entries.map((entry) => (
+            <button
+              type="button"
+              key={entry.id}
+              aria-current={entry.id === selectedId ? 'true' : undefined}
+              onClick={() => {
+                setSelectedId(entry.id);
+                setPage(1);
+              }}
+            >
+              <strong>{entry.file.name}</strong>
+              <small>
+                {entry.status === 'ready'
+                  ? documentTypes[entry.type][locale]
+                  : entry.status === 'error'
+                    ? t.failed
+                    : entry.status === 'reading'
+                      ? t.busy
+                      : t.queued}
+              </small>
+            </button>
+          ))}
+        </section>
+        {selected && (
+          <section
+            className="admin-card document-selected"
+            aria-label={t.preview}
+          >
+            <div className="document-heading">
+              <h2>{selected.file.name}</h2>
               <button
                 type="button"
                 className="button secondary small"
-                onClick={download}
+                disabled={busy || !!reviewing}
+                onClick={() => {
+                  const index = entries.findIndex(
+                    (item) => item.id === selected.id,
+                  );
+                  const next = entries.filter(
+                    (item) => item.id !== selected.id,
+                  );
+                  setEntries(next);
+                  setSelectedId(
+                    next[Math.min(index, next.length - 1)]?.id ?? '',
+                  );
+                  setPage(1);
+                }}
               >
-                {t.download}
+                {t.remove}
               </button>
-            </>
-          )}
-          {pages.map((page) => (
-            <label key={page.number}>
-              {t.page} {page.number} ·{' '}
-              {page.source === 'ocr' ? 'OCR' : t.embedded}
-              <textarea readOnly rows={8} value={page.text || t.empty} />
-            </label>
-          ))}
-        </>
-      )}
-    </section>
+            </div>
+            {selected.status === 'error' && (
+              <p role="alert">{errors[selected.error ?? ''] ?? t.failed}</p>
+            )}
+            {selected.status === 'reading' && <p role="status">{t.busy}</p>}
+            {selected.status === 'queued' && <p role="status">{t.queued}</p>}
+            {selected.status === 'ready' && currentPage && (
+              <div className="document-inspector">
+                <div>
+                  <div className="document-pages">
+                    <button
+                      type="button"
+                      className="button secondary small"
+                      disabled={page <= 1}
+                      onClick={() => setPage(page - 1)}
+                      aria-label={t.previous}
+                    >
+                      ‹
+                    </button>
+                    <span>
+                      {t.page} {page} / {selected.pages.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="button secondary small"
+                      disabled={page >= selected.pages.length}
+                      onClick={() => setPage(page + 1)}
+                      aria-label={t.next}
+                    >
+                      ›
+                    </button>
+                  </div>
+                  <DocumentPreview
+                    key={selected.id + ':' + page}
+                    entry={selected}
+                    number={page}
+                  />
+                </div>
+                <div className="document-fields">
+                  <label>
+                    {t.kind}
+                    <select
+                      value={selected.type}
+                      onChange={(event) => {
+                        const type = event.target.value as DocumentType;
+                        update(selected.id, (item) => ({ ...item, type }));
+                      }}
+                    >
+                      {Object.entries(documentTypes).map(([id, name]) => (
+                        <option key={id} value={id}>
+                          {name[locale]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <h3>{t.fields}</h3>
+                  {keys.map((key) => {
+                    const value = values[key];
+                    const edited = Object.hasOwn(selected.edits, key);
+                    const suggestion = selected.suggestions[key];
+                    const edit = (text: string) =>
+                      update(selected.id, (item) => ({
+                        ...item,
+                        edits: { ...item.edits, [key]: text },
+                      }));
+                    return (
+                      <div key={key} className="document-field">
+                        <label>
+                          {fieldLabel(key, settings, locale)}
+                          <input
+                            value={selected.edits[key] ?? value.value}
+                            maxLength={180}
+                            placeholder={t.missing}
+                            onChange={(event) => edit(event.target.value)}
+                          />
+                        </label>
+                        {edited && <small>{t.edited}</small>}
+                        {!edited && value.uncertain && (
+                          <small className="document-uncertain">
+                            {t.uncertain}
+                          </small>
+                        )}
+                        {!edited && suggestion && (
+                          <div className="document-suggestion">
+                            <span>
+                              {t.suggestion} · {suggestion}
+                            </span>
+                            <button
+                              type="button"
+                              className="button secondary small"
+                              onClick={() => edit(suggestion)}
+                            >
+                              {t.apply}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {selected.reviewEnabled &&
+                    keys.some(
+                      (key) =>
+                        (values[key].page === page || !values[key].value) &&
+                        values[key].uncertain &&
+                        !Object.hasOwn(selected.edits, key) &&
+                        !selected.suggestions[key],
+                    ) && (
+                      <button
+                        type="button"
+                        className="button secondary small"
+                        disabled={busy || !!reviewing}
+                        onClick={() => void recheck(selected)}
+                      >
+                        {t.check}
+                      </button>
+                    )}
+                  {reviewing === selected.id && <p role="status">Ollama…</p>}
+                  {selected.reviewError && <p role="status">{t.reviewError}</p>}
+                  <label>
+                    {t.page} {currentPage.number} ·{' '}
+                    {currentPage.source === 'ocr' ? 'OCR' : t.embedded}
+                    <textarea
+                      readOnly
+                      rows={6}
+                      value={currentPage.text || t.empty}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="button secondary small"
+                    onClick={() => download(selected)}
+                  >
+                    {t.download}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+    </div>
   );
 }

@@ -7,3 +7,10 @@ export const documentLanguages = {
   ru: 'rus+eng',
 } as const;
 export type DocumentLanguage = keyof typeof documentLanguages;
+
+export type DocumentPage = {
+  number: number;
+  source: 'embedded' | 'ocr';
+  text: string;
+  lowConfidenceWords?: string[];
+};

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -8,11 +8,12 @@ import {
   maxDocumentBytes,
   maxDocumentPages,
   type DocumentLanguage,
+  type DocumentPage,
 } from './document-ai-options';
 
 const execute = promisify(execFile);
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-let busy = false;
+const active = new Set<'extract' | 'preview' | 'review'>();
 
 export class DocumentOcrError extends Error {
   constructor(
@@ -98,14 +99,20 @@ async function runTool(
   }
 }
 
-export async function extractDocument(
+async function withDocument<T>(
   request: Request,
-  language: DocumentLanguage,
+  action: 'extract' | 'preview' | 'review',
+  work: (document: {
+    source: string;
+    ext: string;
+    run: (tool: string, args: string[]) => Promise<string>;
+    pageImage: (page: number, size: string, gray: boolean) => Promise<string>;
+  }) => Promise<T>,
 ) {
   const bytes = await readDocument(request);
   const ext = extension(bytes);
-  if (busy) throw new DocumentOcrError('BUSY', 503);
-  busy = true;
+  if (active.has(action)) throw new DocumentOcrError('BUSY', 503);
+  active.add(action);
   try {
     const directory = await mkdtemp(join(tmpdir(), 'taxsolutions-ocr-'));
     try {
@@ -117,9 +124,99 @@ export async function extractDocument(
       ]);
       const run = (tool: string, args: string[]) =>
         runTool(directory, tool, args, signal);
+      const pageImage = async (page: number, size: string, gray: boolean) => {
+        if (ext !== 'pdf') return source;
+        const prefix = join(directory, 'page');
+        await run('pdftoppm', [
+          ...pageRange(page),
+          '-singlefile',
+          '-scale-to',
+          size,
+          ...(gray ? ['-gray'] : []),
+          '-png',
+          source,
+          prefix,
+        ]);
+        return prefix + '.png';
+      };
+      return await work({ source, ext, run, pageImage });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  } finally {
+    active.delete(action);
+  }
+}
+
+const pageRange = (page: number) => ['-f', String(page), '-l', String(page)];
+
+function lowConfidenceWords(tsv: string) {
+  const words = new Set<string>();
+  for (const line of tsv.split('\n')) {
+    const fields = line.split('\t');
+    const confidence = Number(fields[10]);
+    if (
+      fields[0] === '5' &&
+      confidence >= 0 &&
+      confidence < 75 &&
+      fields[11]?.trim()
+    )
+      words.add(fields[11].trim());
+  }
+  return [...words].slice(0, 2000);
+}
+
+export async function renderDocumentPage(
+  request: Request,
+  page: number,
+  action: 'preview' | 'review',
+) {
+  return withDocument(
+    request,
+    action,
+    async ({ ext, source, run, pageImage }) => {
+      if (ext === 'pdf') {
+        const count = await pdfPageCount(run, source);
+        if (page > count) throw new DocumentOcrError('NOT_FOUND', 404);
+      } else if (page !== 1) {
+        throw new DocumentOcrError('NOT_FOUND', 404);
+      }
+      const file = await pageImage(page, '1800', false);
+      return {
+        bytes: await readFile(file),
+        type: ext === 'jpg' ? 'image/jpeg' : 'image/png',
+      };
+    },
+  );
+}
+
+async function pdfPageCount(
+  run: (tool: string, args: string[]) => Promise<string>,
+  source: string,
+) {
+  const info = await run('pdfinfo', [source]);
+  const count = Number(/^Pages:\s+(\d+)$/m.exec(info)?.[1]);
+  if (!Number.isSafeInteger(count) || count < 1)
+    throw new DocumentOcrError('UNREADABLE', 422);
+  if (count > maxDocumentPages)
+    throw new DocumentOcrError('TOO_MANY_PAGES', 422);
+  return count;
+}
+
+export async function extractDocument(
+  request: Request,
+  language: DocumentLanguage,
+) {
+  return withDocument(
+    request,
+    'extract',
+    async ({ source, ext, run, pageImage }) => {
       let languagesChecked = false;
       const selected = documentLanguages[language];
-      const ocr = async (image: string) => {
+      const ocr = async (
+        image: string,
+        number: number,
+      ): Promise<DocumentPage> => {
         if (!languagesChecked) {
           const installed = (await run('tesseract', ['--list-langs'])).split(
             /\r?\n/,
@@ -128,32 +225,44 @@ export async function extractDocument(
             throw new DocumentOcrError('OCR_UNAVAILABLE', 503);
           languagesChecked = true;
         }
-        return run('tesseract', [
+        const output = join(image, '..', 'ocr');
+        await run('tesseract', [
           image,
-          'stdout',
+          output,
           '-l',
           selected,
           '--psm',
           '3',
+          '-c',
+          'tessedit_create_txt=1',
+          '-c',
+          'tessedit_create_tsv=1',
         ]);
+        const [textSize, tsvSize] = await Promise.all([
+          stat(output + '.txt'),
+          stat(output + '.tsv'),
+        ]);
+        if (textSize.size > 1024 * 1024 || tsvSize.size > 8 * 1024 * 1024)
+          throw new DocumentOcrError('UNREADABLE', 422);
+        const [text, tsv] = await Promise.all([
+          readFile(output + '.txt', 'utf8'),
+          readFile(output + '.tsv', 'utf8'),
+        ]);
+        return {
+          number,
+          source: 'ocr',
+          text: text.trim(),
+          lowConfidenceWords: lowConfidenceWords(tsv),
+        };
       };
-      if (ext !== 'pdf') {
-        return [{ number: 1, source: 'ocr', text: (await ocr(source)).trim() }];
-      }
+      if (ext !== 'pdf') return [await ocr(source, 1)];
 
-      const info = await run('pdfinfo', [source]);
-      const count = Number(/^Pages:\s+(\d+)$/m.exec(info)?.[1]);
-      if (!Number.isSafeInteger(count) || count < 1)
-        throw new DocumentOcrError('UNREADABLE', 422);
-      if (count > maxDocumentPages)
-        throw new DocumentOcrError('TOO_MANY_PAGES', 422);
-
-      const pages = [];
+      const count = await pdfPageCount(run, source);
+      const pages: DocumentPage[] = [];
       for (let number = 1; number <= count; number++) {
-        const range = ['-f', String(number), '-l', String(number)];
         const embedded = (
           await run('pdftotext', [
-            ...range,
+            ...pageRange(number),
             '-layout',
             '-enc',
             'UTF-8',
@@ -161,32 +270,13 @@ export async function extractDocument(
             '-',
           ])
         ).trim();
-        if (embedded) {
-          pages.push({ number, source: 'embedded', text: embedded });
-          continue;
-        }
-        const image = join(directory, 'page');
-        await run('pdftoppm', [
-          ...range,
-          '-singlefile',
-          '-scale-to',
-          '2600',
-          '-gray',
-          '-png',
-          source,
-          image,
-        ]);
-        pages.push({
-          number,
-          source: 'ocr',
-          text: (await ocr(image + '.png')).trim(),
-        });
+        pages.push(
+          embedded
+            ? { number, source: 'embedded', text: embedded }
+            : await ocr(await pageImage(number, '2600', true), number),
+        );
       }
       return pages;
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  } finally {
-    busy = false;
-  }
+    },
+  );
 }

@@ -40,9 +40,23 @@ The legacy `compose.yaml` is for development. For production use **deploy/compos
 
 ## Document AI
 
-Sign in to `/workspace` and open **Document AI** to extract and download text from PDF, PNG or JPEG files up to 10 MiB. PDFs can contain up to 12 pages. The tool reads embedded text first and uses local Tesseract for pages without a text layer and for images. Choose Latvian, Russian, English or the combined model. Review accounting values against the original before using the extracted text.
+Sign in to `/workspace` and open **Document AI**. Select up to 20 PDF, PNG or JPEG files (10 MiB each, up to 12 pages per PDF). The file list, document preview and edited fields stay available while you navigate the workspace. Refreshing or signing out clears the files and edits. Field settings are saved per staff account in the current browser. Shared fields apply by default and each document type can override them. Staff can add custom fields, change a document type, correct values and export the corrected fields with the raw OCR text.
 
-The Docker runtime includes Tesseract, all three language models, Poppler and `prlimit`. For development without the app container on Debian or Ubuntu, install `poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-rus tesseract-ocr-eng util-linux`. The OCR runs in the authenticated Next.js application. It is unavailable in the static GitHub Pages demo. Files stay in a private temporary directory for processing and are removed afterward. The app does not save files or OCR results to PostgreSQL, include them in application logs, or send them to a third-party service.
+The Docker runtime includes Tesseract, Latvian, Russian and English language models, Poppler and `prlimit`. For native development on Debian or Ubuntu, install `poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-rus tesseract-ocr-eng util-linux`. The authenticated application reads embedded PDF text and uses local Tesseract on scans and images. Temporary files are removed after each operation. The application does not save OCR files or results to PostgreSQL or include them in application logs. GitHub Pages runs the public static demo.
+
+### Optional local AI review
+
+Set `DOCUMENT_AI_OLLAMA_URL=http://ollama:11434` in `.env` for the local Docker Compose setup. Start the private Ollama service and download the local vision model:
+
+```bash
+docker compose --profile ai up -d ollama
+docker compose --profile ai exec ollama ollama pull qwen3-vl:4b-instruct
+docker compose --profile ai up -d --build app
+```
+
+For native development, use `http://127.0.0.1:11434` with a local Ollama instance. In production, configure an Ollama instance reachable on a private network from the app container, with cloud features disabled. Use `DOCUMENT_AI_OLLAMA_MODEL` to select a different installed local vision model. Leave the URL empty to run OCR without AI review.
+
+TaxSolutions sends a page image and the names of uncertain fields to the configured Ollama instance. It flags missing fields, conflicting matches and words with low Tesseract confidence. Suggestions appear separately from OCR values. Staff can accept them or type their own corrections. If the model is unavailable or a field is still ambiguous, review the field in the preview.
 
 ## Verification
 
