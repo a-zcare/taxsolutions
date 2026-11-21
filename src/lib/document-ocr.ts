@@ -3,6 +3,19 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { detectDocumentType } from './document-ai-fields';
+import {
+  containsDocumentText,
+  extractTemplateValue,
+  findDocumentAnchor,
+  layoutFromTsv,
+  matchingDocumentTemplates,
+  readDocumentRegion,
+  type DocumentLayout,
+  type DocumentTemplate,
+  type DocumentTemplateInput,
+  type TemplateValue,
+} from './document-ai-regions';
 import {
   documentLanguages,
   bytesPerMiB,
@@ -13,7 +26,7 @@ import {
 
 const execute = promisify(execFile);
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const active = new Set<'extract' | 'preview' | 'review'>();
+const active = new Set<'extract' | 'preview' | 'review' | 'teach'>();
 
 export class DocumentOcrError extends Error {
   constructor(
@@ -100,7 +113,7 @@ async function runTool(
 
 async function withDocument<T>(
   request: Request,
-  action: 'extract' | 'preview' | 'review',
+  action: 'extract' | 'preview' | 'review' | 'teach',
   limits: DocumentLimits,
   work: (document: {
     source: string;
@@ -208,82 +221,174 @@ async function pdfPageCount(
   return count;
 }
 
+type RunTool = (tool: string, args: string[]) => Promise<string>;
+
+function pageRecognizer(run: RunTool, language: DocumentLanguage) {
+  let languagesChecked = false;
+  const selected = documentLanguages[language];
+  return async (image: string) => {
+    if (!languagesChecked) {
+      const installed = (await run('tesseract', ['--list-langs'])).split(
+        /\r?\n/,
+      );
+      if (selected.split('+').some((name) => !installed.includes(name)))
+        throw new DocumentOcrError('OCR_UNAVAILABLE', 503);
+      languagesChecked = true;
+    }
+    const output = join(image, '..', 'ocr');
+    await run('tesseract', [
+      image,
+      output,
+      '-l',
+      selected,
+      '--psm',
+      '3',
+      '-c',
+      'tessedit_create_txt=1',
+      '-c',
+      'tessedit_create_tsv=1',
+    ]);
+    const [textSize, tsvSize] = await Promise.all([
+      stat(output + '.txt'),
+      stat(output + '.tsv'),
+    ]);
+    if (textSize.size > 1024 * 1024 || tsvSize.size > 8 * 1024 * 1024)
+      throw new DocumentOcrError('UNREADABLE', 422);
+    const [text, tsv] = await Promise.all([
+      readFile(output + '.txt', 'utf8'),
+      readFile(output + '.tsv', 'utf8'),
+    ]);
+    return { text: text.trim(), tsv };
+  };
+}
+
+const embeddedText = async (run: RunTool, source: string, page: number) =>
+  (
+    await run('pdftotext', [
+      ...pageRange(page),
+      '-layout',
+      '-enc',
+      'UTF-8',
+      source,
+      '-',
+    ])
+  ).trim();
+
 export async function extractDocument(
   request: Request,
   language: DocumentLanguage,
   limits: DocumentLimits,
+  templates: DocumentTemplate[] = [],
 ) {
   return withDocument(
     request,
     'extract',
     limits,
     async ({ source, ext, run, pageImage }) => {
-      let languagesChecked = false;
-      const selected = documentLanguages[language];
-      const ocr = async (
-        image: string,
-        number: number,
-      ): Promise<DocumentPage> => {
-        if (!languagesChecked) {
-          const installed = (await run('tesseract', ['--list-langs'])).split(
-            /\r?\n/,
-          );
-          if (selected.split('+').some((name) => !installed.includes(name)))
-            throw new DocumentOcrError('OCR_UNAVAILABLE', 503);
-          languagesChecked = true;
-        }
-        const output = join(image, '..', 'ocr');
-        await run('tesseract', [
-          image,
-          output,
-          '-l',
-          selected,
-          '--psm',
-          '3',
-          '-c',
-          'tessedit_create_txt=1',
-          '-c',
-          'tessedit_create_tsv=1',
-        ]);
-        const [textSize, tsvSize] = await Promise.all([
-          stat(output + '.txt'),
-          stat(output + '.tsv'),
-        ]);
-        if (textSize.size > 1024 * 1024 || tsvSize.size > 8 * 1024 * 1024)
-          throw new DocumentOcrError('UNREADABLE', 422);
-        const [text, tsv] = await Promise.all([
-          readFile(output + '.txt', 'utf8'),
-          readFile(output + '.tsv', 'utf8'),
-        ]);
-        return {
-          number,
-          source: 'ocr',
-          text: text.trim(),
-          lowConfidenceWords: lowConfidenceWords(tsv),
-        };
-      };
-      if (ext !== 'pdf') return [await ocr(source, 1)];
-
-      const count = await pdfPageCount(run, source, limits.pages);
+      const recognize = pageRecognizer(run, language);
+      const layouts = new Map<number, DocumentLayout>();
+      const count =
+        ext === 'pdf' ? await pdfPageCount(run, source, limits.pages) : 1;
       const pages: DocumentPage[] = [];
       for (let number = 1; number <= count; number++) {
-        const embedded = (
-          await run('pdftotext', [
-            ...pageRange(number),
-            '-layout',
-            '-enc',
-            'UTF-8',
-            source,
-            '-',
-          ])
-        ).trim();
-        pages.push(
-          embedded
-            ? { number, source: 'embedded', text: embedded }
-            : await ocr(await pageImage(number, '2600', true), number),
+        const embedded =
+          ext === 'pdf' ? await embeddedText(run, source, number) : '';
+        if (embedded) {
+          pages.push({ number, source: 'embedded', text: embedded });
+          continue;
+        }
+        const { text, tsv } = await recognize(
+          await pageImage(number, '2600', true),
         );
+        if (templates.some((rule) => rule.page === number))
+          layouts.set(number, layoutFromTsv(tsv));
+        pages.push({
+          number,
+          source: 'ocr',
+          text,
+          lowConfidenceWords: lowConfidenceWords(tsv),
+        });
       }
-      return pages;
+      const matching = matchingDocumentTemplates(
+        templates,
+        detectDocumentType(pages),
+        pages,
+      );
+      const templateValues: Record<string, TemplateValue> = {};
+      for (const rule of matching) {
+        let layout = layouts.get(rule.page);
+        if (!layout) {
+          const { tsv } = await recognize(
+            await pageImage(rule.page, '2600', true),
+          );
+          layout = layoutFromTsv(tsv);
+          layouts.set(rule.page, layout);
+        }
+        const value = extractTemplateValue(rule, layout);
+        if (value) templateValues[rule.field] = value;
+      }
+      return {
+        pages,
+        templateValues,
+        templateReview: matching.map((rule) => rule.field),
+      };
+    },
+  );
+}
+
+export async function learnDocumentTemplate(
+  request: Request,
+  language: DocumentLanguage,
+  limits: DocumentLimits,
+  rule: DocumentTemplateInput,
+) {
+  return withDocument(
+    request,
+    'teach',
+    limits,
+    async ({ source, ext, run, pageImage }) => {
+      const count =
+        ext === 'pdf' ? await pdfPageCount(run, source, limits.pages) : 1;
+      if (rule.page > count) throw new DocumentOcrError('NOT_FOUND', 404);
+      const recognize = pageRecognizer(run, language);
+      const { text, tsv } = await recognize(
+        await pageImage(rule.page, '2600', true),
+      );
+      let supplierFound = containsDocumentText(text, rule.matchText);
+      if (!supplierFound && ext === 'pdf') {
+        supplierFound = containsDocumentText(
+          await embeddedText(run, source, rule.page),
+          rule.matchText,
+        );
+        if (!supplierFound && rule.page !== 1) {
+          const cover =
+            (await embeddedText(run, source, 1)) ||
+            (await recognize(await pageImage(1, '2600', true))).text;
+          supplierFound = containsDocumentText(cover, rule.matchText);
+        }
+      }
+      if (!supplierFound)
+        throw new DocumentOcrError('TEMPLATE_SUPPLIER_MISSING', 422);
+      const layout = layoutFromTsv(tsv);
+      const value = readDocumentRegion(layout, rule.region);
+      if (!value) throw new DocumentOcrError('TEMPLATE_REGION_EMPTY', 422);
+      const anchor = rule.anchor
+        ? findDocumentAnchor(layout, rule.anchor)
+        : undefined;
+      if (rule.anchor && !anchor)
+        throw new DocumentOcrError('TEMPLATE_ANCHOR_MISSING', 422);
+      return {
+        value,
+        rule: anchor
+          ? {
+              ...rule,
+              anchorOffset: {
+                x: rule.region.x - anchor.x,
+                y: rule.region.y - anchor.y,
+              },
+            }
+          : rule,
+      };
     },
   );
 }

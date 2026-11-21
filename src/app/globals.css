@@ -2714,3 +2714,26 @@ body:has(.crm-layout) .admin-language {
 .document-zoom input {
   width: min(8rem, 50%);
 }
+
+.document-image {
+  position: relative;
+}
+
+.document-image-marking {
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.document-region-selection {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.document-region-coordinates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}

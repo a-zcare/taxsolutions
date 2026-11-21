@@ -44,6 +44,10 @@ Sign in to `/workspace` and open **Document AI**. Select up to 20 PDF, PNG or JP
 
 The Docker runtime includes Tesseract, Latvian, Russian and English language models, Poppler and `prlimit`. For native development on Debian or Ubuntu, install `poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-rus tesseract-ocr-eng util-linux`. The authenticated application reads embedded PDF text and uses local Tesseract on scans and images. Temporary files are removed after each operation. The application does not save OCR files or results to PostgreSQL or include them in application logs. GitHub Pages runs the public static demo.
 
+### Recognition rules
+
+An owner or administrator can select **Mark on document** beside a field, drag a region around its value, then enter the supplier name or registration number printed on the document. Optionally enter a unique nearby label such as `Amount due`. The server reads the example region before saving. It uses the document type and supplier text to match later documents and, when a label was provided, follows that label if its position shifts on the same page. Without a label, the rule uses the marked coordinates on that page. Suggestions can be accepted or corrected by staff. A missing or ambiguous label or a low-confidence value remains flagged for review. Rules store the coordinates, field and matching text in PostgreSQL. The training file and its extracted value are not stored. Replace a rule by marking the same field for the same document type and supplier, or delete it under **Saved recognition rules**.
+
 ### Processing limits
 
 Owners and administrators can change the upload size, PDF page count and OCR timeout under **Document AI → Processing limits**. The server stores one shared setting for the workspace and applies it to new requests. Defaults are 10 MiB, 12 pages and 90 seconds. The supported ranges are 1–30 MiB, 1–50 pages and 15–300 seconds. The OCR timer starts after upload. The optional Ollama request has its own timeout.

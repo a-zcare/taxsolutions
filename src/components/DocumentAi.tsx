@@ -6,6 +6,7 @@ import {
   defaultDocumentLimits,
   documentLimitRanges,
   type DocumentLimits,
+  type DocumentLanguage,
   type DocumentPage,
 } from '@/lib/document-ai-options';
 import {
@@ -26,6 +27,15 @@ import DocumentLimitSettings, {
   documentSettingsEndpoint,
 } from './DocumentLimitSettings';
 import { documentAiCopy } from './document-ai-copy';
+import DocumentTemplateSettings from './DocumentTemplateSettings';
+import DocumentTemplateTraining from './DocumentTemplateTraining';
+import { templateCopy } from './document-template-copy';
+import {
+  documentTemplateHeader,
+  type DocumentRegion,
+  type DocumentTemplateInput,
+  type TemplateValue,
+} from '@/lib/document-ai-regions';
 
 type DocumentEntry = {
   id: string;
@@ -33,6 +43,9 @@ type DocumentEntry = {
   status: 'queued' | 'reading' | 'ready' | 'error';
   type: DocumentType;
   pages: DocumentPage[];
+  language: DocumentLanguage;
+  templateValues: Record<string, TemplateValue>;
+  templateReview: string[];
   fields?: string[];
   edits: Record<string, string>;
   suggestions: Record<string, string>;
@@ -48,13 +61,11 @@ async function documentRequest(
   file: File,
   query: URLSearchParams,
   signal: AbortSignal,
-  fields?: string,
+  extraHeaders?: Record<string, string>,
 ) {
   const response = await fetch(`${endpoint}?${query}`, {
     method: 'POST',
-    headers: fields
-      ? { ...rawHeaders, 'X-Document-Fields': fields }
-      : rawHeaders,
+    headers: { ...rawHeaders, ...extraHeaders },
     body: file,
     signal,
   });
@@ -69,9 +80,13 @@ async function documentRequest(
 function DocumentPreview({
   entry,
   number,
+  region,
+  onRegion,
 }: {
   entry: DocumentEntry;
   number: number;
+  region?: DocumentRegion | null;
+  onRegion?: (region: DocumentRegion) => void;
 }) {
   const { locale } = useAdminLanguage();
   const t = documentAiCopy[locale];
@@ -79,6 +94,27 @@ function DocumentPreview({
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [zoom, setZoom] = useState(100);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const [draft, setDraft] = useState<DocumentRegion | null>(null);
+  const highlighted = draft ?? region;
+  function point(event: React.PointerEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)),
+    };
+  }
+  function rectangle(
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+  ) {
+    return {
+      x: Math.min(start.x, end.x),
+      y: Math.min(start.y, end.y),
+      width: Math.abs(end.x - start.x),
+      height: Math.abs(end.y - start.y),
+    };
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -128,13 +164,68 @@ function DocumentPreview({
       </label>
       <div className="document-preview">
         {image && !error && (
-          // eslint-disable-next-line @next/next/no-img-element -- Preview is a private, temporary browser blob.
-          <img
-            src={image}
-            style={{ width: zoom + '%', maxWidth: 'none' }}
-            alt={`${entry.file.name} · ${t.page} ${number}`}
-            onError={() => setError(true)}
-          />
+          <div
+            className={
+              onRegion
+                ? 'document-image document-image-marking'
+                : 'document-image'
+            }
+            style={{ width: zoom + '%' }}
+            onPointerDown={
+              onRegion
+                ? (event) => {
+                    if (event.button !== 0) return;
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    dragStart.current = point(event);
+                    setDraft(rectangle(dragStart.current, dragStart.current));
+                  }
+                : undefined
+            }
+            onPointerMove={
+              onRegion
+                ? (event) => {
+                    if (dragStart.current)
+                      setDraft(rectangle(dragStart.current, point(event)));
+                  }
+                : undefined
+            }
+            onPointerUp={
+              onRegion
+                ? (event) => {
+                    if (!dragStart.current) return;
+                    const selected = rectangle(dragStart.current, point(event));
+                    dragStart.current = null;
+                    setDraft(null);
+                    if (selected.width >= 0.003 && selected.height >= 0.003)
+                      onRegion(selected);
+                  }
+                : undefined
+            }
+            onPointerCancel={() => {
+              dragStart.current = null;
+              setDraft(null);
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- Preview uses a private browser blob. */}
+            <img
+              src={image}
+              alt={`${entry.file.name} · ${t.page} ${number}`}
+              draggable={false}
+              onError={() => setError(true)}
+            />
+            {highlighted && (
+              <span
+                className="document-region-selection"
+                aria-hidden="true"
+                style={{
+                  left: highlighted.x * 100 + '%',
+                  top: highlighted.y * 100 + '%',
+                  width: highlighted.width * 100 + '%',
+                  height: highlighted.height * 100 + '%',
+                }}
+              />
+            )}
+          </div>
         )}
         {error && (
           <div role="alert">
@@ -168,6 +259,18 @@ export default function DocumentAi({
 }) {
   const { locale } = useAdminLanguage();
   const t = documentAiCopy[locale];
+  const template = templateCopy[locale];
+  const [ruleRevision, setRuleRevision] = useState(0);
+  const [mark, setMark] = useState<{
+    id: string;
+    page: number;
+    field: string;
+    region: DocumentRegion | null;
+  } | null>(null);
+  const [ruleMessage, setRuleMessage] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
   const storageKey = 'taxsolutions-document-fields-' + staffId;
   const [settings, setSettings] = useState(defaultFieldSettings);
   const [limits, setLimits] = useState<DocumentLimits | null>(null);
@@ -214,6 +317,41 @@ export default function DocumentAi({
     };
   }, [selectedFields, selectedType, selectedPages, settings]);
   const currentPage = selected?.pages[page - 1];
+  const training =
+    mark?.id === selected?.id && mark?.page === page ? mark : null;
+
+  async function saveRule(
+    entry: DocumentEntry,
+    field: string,
+    matchText: string,
+    anchor: string,
+    region: DocumentRegion,
+  ) {
+    const rule: DocumentTemplateInput = {
+      type: entry.type,
+      matchText,
+      field,
+      label: fieldLabel(field, settings, locale),
+      page,
+      region,
+      anchor,
+    };
+    const header = btoa(
+      String.fromCharCode(...new TextEncoder().encode(JSON.stringify(rule))),
+    );
+    const response = await documentRequest(
+      entry.file,
+      new URLSearchParams({ action: 'teach', language: entry.language }),
+      AbortSignal.timeout(360000),
+      { [documentTemplateHeader]: header },
+    );
+    const { value } = (await response.json()) as { value: string };
+    setRuleMessage({ id: entry.id, value });
+    setRuleRevision((revision) => revision + 1);
+    setMark((current) =>
+      current?.id === entry.id && current.field === field ? null : current,
+    );
+  }
 
   function changeSettings(next: FieldSettings) {
     setSettings(next);
@@ -244,7 +382,8 @@ export default function DocumentAi({
       ([key, value]) =>
         value.uncertain &&
         !Object.hasOwn(entry.edits, key) &&
-        !entry.suggestions[key],
+        !entry.suggestions[key] &&
+        !entry.templateValues[key],
     );
     const targets = preferredPage
       ? [preferredPage]
@@ -273,7 +412,7 @@ export default function DocumentAi({
             entry.file,
             new URLSearchParams({ action: 'review', page: String(target) }),
             signal,
-            fields,
+            { 'X-Document-Fields': fields },
           );
           const { values } = (await response.json()) as {
             values: (string | null)[];
@@ -316,12 +455,16 @@ export default function DocumentAi({
       return setError('TOO_LARGE');
     if (entries.length + files.length > maxFiles) return setError('LIST_FULL');
 
+    const language = String(fields.get('language')) as DocumentLanguage;
     const additions: DocumentEntry[] = files.map((file) => ({
       id: crypto.randomUUID(),
       file,
       status: 'queued',
       type: 'other',
       pages: [],
+      language,
+      templateValues: {},
+      templateReview: [],
       edits: {},
       suggestions: {},
     }));
@@ -332,7 +475,6 @@ export default function DocumentAi({
     setSelectedId(additions[0].id);
     setPage(1);
     form.reset();
-    const language = String(fields.get('language'));
     try {
       for (const entry of additions) {
         if (controller.signal.aborted) break;
@@ -343,16 +485,21 @@ export default function DocumentAi({
             new URLSearchParams({ language }),
             controller.signal,
           );
-          const { pages, reviewEnabled } = (await result.json()) as {
-            pages: DocumentPage[];
-            reviewEnabled: boolean;
-          };
+          const { pages, reviewEnabled, templateValues, templateReview } =
+            (await result.json()) as {
+              pages: DocumentPage[];
+              reviewEnabled: boolean;
+              templateValues: Record<string, TemplateValue>;
+              templateReview: string[];
+            };
           const type = detectDocumentType(pages);
           const ready = {
             ...entry,
             pages,
             type,
             reviewEnabled,
+            templateValues,
+            templateReview,
             status: 'ready',
           } as const;
           update(entry.id, (item) => ({
@@ -360,6 +507,8 @@ export default function DocumentAi({
             pages,
             type,
             reviewEnabled,
+            templateValues,
+            templateReview,
             status: 'ready',
           }));
           if (reviewEnabled) await review(ready, controller.signal);
@@ -465,6 +614,9 @@ export default function DocumentAi({
         <DocumentLimitSettings limits={limits} change={setLimits} />
       )}
       <DocumentFieldSettings settings={settings} change={changeSettings} />
+      {canManage && (
+        <DocumentTemplateSettings visible={visible} revision={ruleRevision} />
+      )}
       <div className="document-layout">
         <section className="admin-card document-file-list" aria-label={t.files}>
           <h2>{t.files}</h2>
@@ -555,7 +707,46 @@ export default function DocumentAi({
                     key={selected.id + ':' + page}
                     entry={selected}
                     number={page}
+                    region={training?.region}
+                    onRegion={
+                      training
+                        ? (region) => setMark({ ...training, region })
+                        : undefined
+                    }
                   />
+                  {training && (
+                    <DocumentTemplateTraining
+                      key={
+                        training.id + ':' + training.page + ':' + training.field
+                      }
+                      label={fieldLabel(training.field, settings, locale)}
+                      supplier={
+                        selected.edits.supplier ??
+                        captureFields(
+                          selected.pages,
+                          ['supplier', 'registration'],
+                          settings,
+                        ).supplier.value
+                      }
+                      region={training.region}
+                      onRegion={(region) => setMark({ ...training, region })}
+                      onSave={(supplier, anchor, region) =>
+                        saveRule(
+                          selected,
+                          training.field,
+                          supplier,
+                          anchor,
+                          region,
+                        )
+                      }
+                      onCancel={() => setMark(null)}
+                    />
+                  )}
+                  {ruleMessage?.id === selected.id && (
+                    <p role="status">
+                      {template.saved} {ruleMessage.value}
+                    </p>
+                  )}
                 </div>
                 <div className="document-fields">
                   <label>
@@ -615,7 +806,11 @@ export default function DocumentAi({
                   {keys.map((key) => {
                     const value = values[key];
                     const edited = Object.hasOwn(selected.edits, key);
-                    const suggestion = selected.suggestions[key];
+                    const templateValue = selected.templateValues[key];
+                    const suggestion =
+                      templateValue?.value ?? selected.suggestions[key];
+                    const needsReview =
+                      value.uncertain || selected.templateReview.includes(key);
                     const edit = (text: string) =>
                       update(selected.id, (item) => ({
                         ...item,
@@ -632,8 +827,29 @@ export default function DocumentAi({
                             onChange={(event) => edit(event.target.value)}
                           />
                         </label>
+                        {canManage && (
+                          <button
+                            type="button"
+                            className="button secondary small"
+                            aria-label={`${template.mark} · ${fieldLabel(key, settings, locale)}`}
+                            onClick={() => {
+                              setRuleMessage(null);
+                              setMark({
+                                id: selected.id,
+                                page,
+                                field: key,
+                                region: null,
+                              });
+                              document
+                                .querySelector('.document-preview')
+                                ?.scrollIntoView({ block: 'nearest' });
+                            }}
+                          >
+                            {template.mark}
+                          </button>
+                        )}
                         {edited && <small>{t.edited}</small>}
-                        {!edited && value.uncertain && (
+                        {!edited && needsReview && (
                           <small className="document-uncertain">
                             {t.uncertain}
                           </small>
@@ -641,7 +857,8 @@ export default function DocumentAi({
                         {!edited && suggestion && (
                           <div className="document-suggestion">
                             <span>
-                              {t.suggestion} · {suggestion}
+                              {templateValue ? template.from : t.suggestion} ·{' '}
+                              {suggestion}
                             </span>
                             <button
                               type="button"
@@ -661,7 +878,8 @@ export default function DocumentAi({
                         (values[key].page === page || !values[key].value) &&
                         values[key].uncertain &&
                         !Object.hasOwn(selected.edits, key) &&
-                        !selected.suggestions[key],
+                        !selected.suggestions[key] &&
+                        !selected.templateValues[key],
                     ) && (
                       <button
                         type="button"

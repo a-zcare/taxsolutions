@@ -11,7 +11,15 @@ import {
   DocumentOcrError,
   extractDocument,
   renderDocumentPage,
+  learnDocumentTemplate,
 } from '@/lib/document-ocr';
+import {
+  templateInputSchema,
+  listDocumentTemplates,
+  saveDocumentTemplate,
+} from '@/lib/document-ai-templates';
+import { documentTemplateHeader } from '@/lib/document-ai-regions';
+import { assertManager } from '@/lib/v2/policy';
 import { getDocumentLimits } from '@/lib/document-ai-limits';
 import { failure } from '@/lib/http';
 import { rateLimit, requireActor, sameOrigin } from '@/lib/security';
@@ -26,17 +34,39 @@ export async function POST(request: Request) {
     const params = new URL(request.url).searchParams;
     const action = params.get('action') ?? 'extract';
     const limits = await getDocumentLimits();
-    if (action === 'extract') {
+    if (action === 'extract' || action === 'teach') {
       const language = params.get('language') ?? 'auto';
       if (!Object.hasOwn(documentLanguages, language)) throw Error('INVALID');
+      if (action === 'teach') {
+        assertManager(actor);
+        await rateLimit('document-ai-template-write', 30, actor.id);
+        const encoded = request.headers.get(documentTemplateHeader) ?? '';
+        if (!encoded || encoded.length > 4096) throw Error('INVALID');
+        let raw: unknown;
+        try {
+          raw = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+        } catch {
+          throw Error('INVALID');
+        }
+        const rule = templateInputSchema.parse(raw);
+        const learned = await learnDocumentTemplate(
+          request,
+          language as DocumentLanguage,
+          limits,
+          rule,
+        );
+        const template = await saveDocumentTemplate(actor, learned.rule);
+        return Response.json({ template, value: learned.value }, { headers });
+      }
       await rateLimit('document-ai', 20, actor.id);
-      const pages = await extractDocument(
+      const result = await extractDocument(
         request,
         language as DocumentLanguage,
         limits,
+        await listDocumentTemplates(),
       );
       return Response.json(
-        { pages, reviewEnabled: reviewAvailable() },
+        { ...result, reviewEnabled: reviewAvailable() },
         { headers },
       );
     }

@@ -171,3 +171,67 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
   await page.getByRole('button', { name: 'Download text (.txt)' }).click();
   expect((await download).suggestedFilename()).toBe('taxsolutions-ocr.txt');
 });
+
+test('Document AI saves a marked field and follows its label on the next invoice', async ({
+  page,
+}) => {
+  await page.goto('/admin');
+  await page
+    .getByRole('combobox', { name: 'Language / Valoda / Язык' })
+    .selectOption('en');
+  await fillTestMfa(page);
+  await page.getByRole('button', { name: 'Sign in →' }).click();
+  await page.getByRole('button', { name: 'Document AI' }).click();
+
+  const fixture = await page.context().newPage();
+  async function invoice(name: string, top: number, amount: string) {
+    await fixture.setContent(
+      '<main style="position:relative;width:1000px;height:500px;background:white;color:black;font:32px Arial">' +
+        '<div style="position:absolute;left:50px;top:25px">Invoice</div>' +
+        '<div style="position:absolute;left:50px;top:80px">Supplier: Baltic Training Ltd</div>' +
+        `<div style="position:absolute;left:50px;top:${top}px">Amount due</div>` +
+        `<div style="position:absolute;left:550px;top:${top}px">${amount} EUR</div></main>`,
+    );
+    return {
+      name,
+      mimeType: 'image/png',
+      buffer: await fixture.locator('main').screenshot(),
+    };
+  }
+  const first = await invoice('template-example.png', 240, '42.50');
+  const next = await invoice('template-later.png', 350, '83.17');
+  await fixture.close();
+
+  const file = page.getByLabel(/Document \(up to/);
+  await file.setInputFiles(first);
+  await page.getByRole('button', { name: 'Extract text' }).click();
+  await page
+    .getByRole('button', { name: 'Mark on document · Total amount' })
+    .click();
+  await page.getByRole('spinbutton', { name: 'Left (%)' }).fill('50');
+  await page.getByRole('spinbutton', { name: 'Top (%)' }).fill('47');
+  await page.getByRole('spinbutton', { name: 'Width (%)' }).fill('35');
+  await page.getByRole('spinbutton', { name: 'Height (%)' }).fill('12');
+  await page.locator('input[name=matchText]').fill('Baltic Training Ltd');
+  await page.locator('input[name=anchor]').fill('Amount due');
+  await page.getByRole('button', { name: 'Read and save rule' }).click();
+  await expect(
+    page.getByText(/Rule saved\. Read value: 42\.50 EUR/),
+  ).toBeVisible();
+
+  await file.setInputFiles(next);
+  await page.getByRole('button', { name: 'Extract text' }).click();
+  await expect(
+    page.getByText(/Template suggestion · 83\.17 EUR/),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Use suggestion' }).click();
+  await expect(
+    page.getByRole('textbox', { name: 'Total amount', exact: true }),
+  ).toHaveValue('83.17 EUR');
+  await page.getByText('Saved recognition rules', { exact: true }).click();
+  await expect(
+    page.getByText('Baltic Training Ltd · Invoice · Total amount'),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Remove rule' }).click();
+  await expect(page.getByText('No rules yet.')).toBeVisible();
+});
