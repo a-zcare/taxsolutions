@@ -9,7 +9,11 @@
   request_body @documentOcr {
     max_size 31457280
   }
-  @otherRequests not path /api/workspace/document-ai
+  @documentReview path /api/workspace/document-ai/archive/*
+  request_body @documentReview {
+    max_size 98304
+  }
+  @otherRequests not path /api/workspace/document-ai /api/workspace/document-ai/archive/*
   request_body @otherRequests {
     max_size 32KB
   }

@@ -40,9 +40,20 @@ The legacy `compose.yaml` is for development. For production use **deploy/compos
 
 ## Document AI
 
-Sign in to `/workspace` and open **Document AI**. Select up to 20 PDF, PNG or JPEG files (default 10 MiB each, up to 12 pages per PDF). The file list, document preview and edited fields stay available while you navigate the workspace. Refreshing or signing out clears the files and edits. Field settings are saved per staff account in the current browser. Shared fields apply by default and each document type can override them. Staff can add custom fields, change a document type, override the fields for an individual file, correct values and export the corrected fields with the raw OCR text.
+Sign in to `/workspace` and open **Document AI**. Select up to 20 PDF, PNG or JPEG files (default 10 MiB each, up to 12 pages per PDF). Select a CRM client and an accounting month before uploading to save files to the review queue. Uploads with no client selected remain temporary. Field settings are saved per staff account in the current browser. Shared fields apply by default and each document type can override them. Staff can add custom fields, change a document type, override the fields for an individual file, correct values and export the corrected fields with the raw OCR text.
 
-The Docker runtime includes Tesseract, Latvian, Russian and English language models, Poppler and `prlimit`. For native development on Debian or Ubuntu, install `poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-rus tesseract-ocr-eng util-linux`. The authenticated application reads embedded PDF text and uses local Tesseract on scans and images. Temporary files are removed after each operation. The application does not save OCR files or results to PostgreSQL or include them in application logs. GitHub Pages runs the public static demo.
+The Docker runtime includes Tesseract, Latvian, Russian and English language models, Poppler and `prlimit`. For native development on Debian or Ubuntu, install `poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-rus tesseract-ocr-eng util-linux`. The authenticated application reads embedded PDF text and uses local Tesseract on scans and images. Temporary files are removed after each operation. The archive encrypts original bytes, filenames and field data in PostgreSQL using the existing DATA_ENCRYPTION_KEY. Files and OCR results are not written to application logs. GitHub Pages runs the public static demo.
+
+### Review workflow
+
+1. Pick the client and the accounting month and upload a batch. Identical files are rejected for that client across all months. A matching supplier and invoice number produces a warning for manual review.
+2. Open a row from the queue. Use **Save draft** to retain corrections and resume later. Use **Confirm and open next** to lock the checked values and select the next pending document from the same client and month.
+3. Download **Export confirmed CSV** for the selected client and month. The export uses UTF-8, a stable core set of accounting columns and any additional confirmed fields. It is a general CSV, so accounting software may require mapping the columns.
+4. Use **Extract PDF pages** on a multi-page PDF to open the chosen range as a new document. The original remains available.
+
+The module uses the CRM client access rules for lists, originals, review writes and exports. It is staff-only. Archive and review changes are audited. Keep the existing application encryption key with a recoverable backup. Run Prisma migrations before starting the upgraded app. Existing client erasure refuses to remove clients with archived accounting documents to prevent accidental loss.
+
+The engine and rule matching live in `document-ocr.ts` and `document-ai-regions.ts`. Archive persistence, client scoping and review transitions live in `document-archive.ts`; the HTTP routes and CRM components consume these modules. An integration into a multi-tenant platform must supply the target workspace's tenant and client authorization.
 
 ### Recognition rules
 

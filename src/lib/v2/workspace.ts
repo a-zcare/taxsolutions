@@ -660,6 +660,8 @@ export async function workspaceAction(
           })
         )
           throw Error('CONFLICT');
+        if (await tx.accountingDocument.count({ where: { clientId: row.id } }))
+          throw Error('CONFLICT');
         await tx.task.deleteMany({
           where: {
             OR: [{ clientId: row.id }, { booking: { email: row.email } }],

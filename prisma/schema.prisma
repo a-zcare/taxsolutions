@@ -135,6 +135,7 @@ model Client {
  updatedAt DateTime @updatedAt
  bookings Booking[]
  tasks Task[]
+ documents AccountingDocument[]
  @@index([ownerId,status])
 }
 model Task {
@@ -243,4 +244,24 @@ model Inquiry {
  assigned Staff? @relation(fields:[assignedId],references:[id],onDelete:SetNull)
  createdAt DateTime @default(now())
  @@index([assignedId,status])
+}
+
+model AccountingDocument {
+ id String @id @default(uuid())
+ clientId String
+ client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+ period String
+ encryptedName String
+ mimeType String
+ content Bytes
+ contentHash String
+ invoiceHash String?
+ data String
+ status String @default("PENDING")
+ revision Int @default(1)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([clientId, contentHash])
+ @@index([clientId, period, status, createdAt, id])
+ @@index([clientId, invoiceHash])
 }

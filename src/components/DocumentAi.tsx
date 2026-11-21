@@ -22,6 +22,18 @@ import {
   type FieldSettings,
 } from '@/lib/document-ai-fields';
 import { useAdminLanguage } from './AdminLanguage';
+import { formatInTimeZone } from 'date-fns-tz';
+import DocumentArchiveQueue, {
+  type ArchiveSelection,
+} from './DocumentArchiveQueue';
+import { archiveCopy } from './document-archive-copy';
+import {
+  archiveEndpoint,
+  archiveHeader,
+  archiveUploadHeader,
+  type ArchiveDetail,
+  type ArchiveRow,
+} from '@/lib/document-archive-types';
 import DocumentFieldSettings from './DocumentFieldSettings';
 import DocumentLimitSettings, {
   documentSettingsEndpoint,
@@ -52,6 +64,8 @@ type DocumentEntry = {
   error?: string;
   reviewEnabled?: boolean;
   reviewError?: boolean;
+  archive?: ArchiveRow;
+  possibleDuplicate?: boolean;
 };
 const endpoint = '/api/workspace/document-ai';
 const maxFiles = 20;
@@ -260,6 +274,20 @@ export default function DocumentAi({
   const { locale } = useAdminLanguage();
   const t = documentAiCopy[locale];
   const template = templateCopy[locale];
+  const archiveText = archiveCopy[locale];
+  const [archiveScope, setArchiveScope] = useState<ArchiveSelection>(() => ({
+    clientId: '',
+    period: formatInTimeZone(new Date(), 'Europe/Riga', 'yyyy-MM'),
+  }));
+  const [archiveRevision, setArchiveRevision] = useState(0);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const [archiveMessage, setArchiveMessage] = useState('');
+  const [archiveRows, setArchiveRows] = useState<ArchiveRow[]>([]);
+  const [highlight, setHighlight] = useState<{
+    id: string;
+    page: number;
+    region: DocumentRegion;
+  } | null>(null);
   const [ruleRevision, setRuleRevision] = useState(0);
   const [mark, setMark] = useState<{
     id: string;
@@ -284,6 +312,17 @@ export default function DocumentAi({
   useEffect(() => {
     try {
       setSettings(readFieldSettings(localStorage.getItem(storageKey)));
+      const archived = localStorage.getItem(storageKey + '-archive');
+      if (archived) {
+        const scope = JSON.parse(archived) as Partial<ArchiveSelection>;
+        if (
+          typeof scope.clientId === 'string' &&
+          typeof scope.period === 'string' &&
+          /^[a-f0-9-]{36}$/i.test(scope.clientId) &&
+          /^[2-9]\d{3}-(0[1-9]|1[0-2])$/.test(scope.period)
+        )
+          setArchiveScope({ clientId: scope.clientId, period: scope.period });
+      }
     } catch {
       setSettings(defaultFieldSettings);
     }
@@ -351,6 +390,203 @@ export default function DocumentAi({
     setMark((current) =>
       current?.id === entry.id && current.field === field ? null : current,
     );
+  }
+
+  function selectEntry(id: string) {
+    setSelectedId(id);
+    setPage(1);
+  }
+
+  async function openArchive(row: ArchiveRow, reload = false) {
+    const existing = entries.find((entry) => entry.archive?.id === row.id);
+    if (existing && !reload) {
+      selectEntry(existing.id);
+      return;
+    }
+    if (!existing && entries.length >= maxFiles) {
+      setError('LIST_FULL');
+      return;
+    }
+    setArchiveBusy(true);
+    setArchiveMessage('');
+    try {
+      const url = `${archiveEndpoint}/${row.id}`;
+      const detailResponse = await fetch(url);
+      if (!detailResponse.ok) throw Error();
+      const detail = (await detailResponse.json()) as ArchiveDetail;
+      // When already open, reuse the authenticated original in memory.
+      const file =
+        existing?.file ??
+        (await (async () => {
+          const response = await fetch(url + '?file=1');
+          if (!response.ok) throw Error();
+          const blob = await response.blob();
+          return new File([blob], detail.name, { type: blob.type });
+        })());
+      const { values: savedValues, ...data } = detail.data;
+      const item: DocumentEntry = {
+        ...data,
+        file,
+        id: existing?.id ?? row.id,
+        archive: detail,
+        status: 'ready',
+        edits:
+          detail.status === 'CONFIRMED'
+            ? Object.fromEntries(
+                Object.entries(savedValues).map(([key, { value }]) => [
+                  key,
+                  value,
+                ]),
+              )
+            : data.edits,
+        suggestions: {},
+        reviewEnabled: detail.reviewEnabled,
+        possibleDuplicate: detail.possibleDuplicate,
+      };
+      if (existing) update(existing.id, () => item);
+      else setEntries((all) => [...all, item]);
+      selectEntry(item.id);
+    } catch {
+      setArchiveMessage(archiveText.failed);
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  async function saveReview(entry: DocumentEntry, confirm: boolean) {
+    if (!entry.archive || archiveBusy) return;
+    setArchiveMessage('');
+    setArchiveBusy(true);
+    try {
+      const snapshot = Object.fromEntries(
+        keys.map((key) => [
+          key,
+          {
+            label: fieldLabel(key, settings, locale),
+            value: (entry.edits[key] ?? values[key].value).slice(0, 180),
+          },
+        ]),
+      );
+      const response = await fetch(`${archiveEndpoint}/${entry.archive.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          revision: entry.archive.revision,
+          confirm,
+          type: entry.type,
+          fields: keys,
+          edits: entry.edits,
+          values: snapshot,
+        }),
+      });
+      if (response.status === 409) {
+        setArchiveMessage(archiveText.conflict);
+        return;
+      }
+      if (!response.ok) throw Error();
+      const row = (await response.json()) as ArchiveRow;
+      update(entry.id, (item) => ({
+        ...item,
+        archive: row,
+        ...(confirm
+          ? {
+              fields: keys,
+              edits: Object.fromEntries(
+                Object.entries(snapshot).map(([key, { value }]) => [
+                  key,
+                  value,
+                ]),
+              ),
+            }
+          : {}),
+      }));
+      setArchiveRevision((revision) => revision + 1);
+      if (!confirm) {
+        setArchiveMessage(archiveText.saved);
+        return;
+      }
+      const position = archiveRows.findIndex(
+        (candidate) => candidate.id === row.id,
+      );
+      const ordered = [
+        ...archiveRows.slice(position + 1),
+        ...archiveRows.slice(0, position + 1),
+      ];
+      const next = ordered.find(
+        (candidate) =>
+          candidate.id !== row.id &&
+          candidate.status === 'PENDING' &&
+          candidate.clientId === row.clientId &&
+          candidate.period === row.period,
+      );
+      const localNext = entries.find(
+        (candidate) =>
+          candidate.id !== entry.id &&
+          candidate.archive?.status === 'PENDING' &&
+          candidate.archive.clientId === row.clientId &&
+          candidate.archive.period === row.period,
+      );
+      if (next) await openArchive(next);
+      else if (localNext) selectEntry(localNext.id);
+      else {
+        const params = new URLSearchParams({
+          clientId: row.clientId,
+          period: row.period,
+          status: 'PENDING',
+        });
+        const response = await fetch(`${archiveEndpoint}?${params}`).catch(
+          () => null,
+        );
+        if (response?.ok) {
+          const result = (await response.json()) as { rows: ArchiveRow[] };
+          if (result.rows[0]) await openArchive(result.rows[0]);
+        }
+      }
+      setArchiveMessage(archiveText.accepted);
+    } catch {
+      setArchiveMessage(archiveText.failed);
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  async function split(
+    entry: DocumentEntry,
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+    if (active.current || archiveBusy) return;
+    if (entries.length >= maxFiles) {
+      setError('LIST_FULL');
+      return;
+    }
+    const fields = new FormData(event.currentTarget);
+    const start = Number(fields.get('start')),
+      end = Number(fields.get('end'));
+    setArchiveBusy(true);
+    setArchiveMessage('');
+    try {
+      const response = await documentRequest(
+        entry.file,
+        new URLSearchParams({
+          action: 'split',
+          start: String(start),
+          end: String(end),
+        }),
+        AbortSignal.timeout(360000),
+      );
+      const pdf = new File(
+        [await response.blob()],
+        entry.file.name.replace(/\.pdf$/i, '') + `-${start}-${end}.pdf`,
+        { type: 'application/pdf' },
+      );
+      await processFiles([pdf], entry.language, entry.archive);
+      setArchiveMessage(archiveText.splitDone);
+    } catch {
+      setArchiveMessage(archiveText.failed);
+    } finally {
+      setArchiveBusy(false);
+    }
   }
 
   function changeSettings(next: FieldSettings) {
@@ -455,7 +691,24 @@ export default function DocumentAi({
       return setError('TOO_LARGE');
     if (entries.length + files.length > maxFiles) return setError('LIST_FULL');
 
+    if (archiveScope.clientId && !archiveScope.period) {
+      setArchiveMessage(archiveText.failed);
+      return;
+    }
     const language = String(fields.get('language')) as DocumentLanguage;
+    form.reset();
+    await processFiles(
+      files,
+      language,
+      archiveScope.clientId ? archiveScope : undefined,
+    );
+  }
+
+  async function processFiles(
+    files: File[],
+    language: DocumentLanguage,
+    selection?: ArchiveSelection,
+  ) {
     const additions: DocumentEntry[] = files.map((file) => ({
       id: crypto.randomUUID(),
       file,
@@ -474,7 +727,6 @@ export default function DocumentAi({
     setEntries((previous) => [...previous, ...additions]);
     setSelectedId(additions[0].id);
     setPage(1);
-    form.reset();
     try {
       for (const entry of additions) {
         if (controller.signal.aborted) break;
@@ -484,14 +736,43 @@ export default function DocumentAi({
             entry.file,
             new URLSearchParams({ language }),
             controller.signal,
+            selection
+              ? {
+                  [archiveUploadHeader]: archiveHeader({
+                    clientId: selection.clientId,
+                    period: selection.period,
+                    name: entry.file.name,
+                  }),
+                }
+              : undefined,
           );
-          const { pages, reviewEnabled, templateValues, templateReview } =
-            (await result.json()) as {
-              pages: DocumentPage[];
-              reviewEnabled: boolean;
-              templateValues: Record<string, TemplateValue>;
-              templateReview: string[];
+          const {
+            pages,
+            reviewEnabled,
+            templateValues,
+            templateReview,
+            archive,
+          } = (await result.json()) as {
+            pages: DocumentPage[];
+            reviewEnabled: boolean;
+            templateValues: Record<string, TemplateValue>;
+            templateReview: string[];
+            archive?: {
+              row: ArchiveRow;
+              exactDuplicate: boolean;
+              possibleDuplicate: boolean;
             };
+          };
+          if (archive?.exactDuplicate) {
+            update(entry.id, (item) => ({
+              ...item,
+              archive: archive.row,
+              status: 'error',
+              error: 'EXACT_DUPLICATE',
+            }));
+            setArchiveRevision((revision) => revision + 1);
+            continue;
+          }
           const type = detectDocumentType(pages);
           const ready = {
             ...entry,
@@ -500,6 +781,8 @@ export default function DocumentAi({
             reviewEnabled,
             templateValues,
             templateReview,
+            archive: archive?.row,
+            possibleDuplicate: archive?.possibleDuplicate,
             status: 'ready',
           } as const;
           update(entry.id, (item) => ({
@@ -509,8 +792,11 @@ export default function DocumentAi({
             reviewEnabled,
             templateValues,
             templateReview,
+            archive: archive?.row,
+            possibleDuplicate: archive?.possibleDuplicate,
             status: 'ready',
           }));
+          if (archive) setArchiveRevision((revision) => revision + 1);
           if (reviewEnabled) await review(ready, controller.signal);
         } catch (error) {
           if (!controller.signal.aborted)
@@ -567,12 +853,36 @@ export default function DocumentAi({
     BUSY: t.retry,
     RATE: t.retry,
     LIST_FULL: t.limit,
+    EXACT_DUPLICATE: archiveText.duplicate,
   };
 
   return (
     <div className="document-workspace">
+      <DocumentArchiveQueue
+        visible={visible}
+        scope={archiveScope}
+        setScope={(scope) => {
+          setArchiveScope(scope);
+          try {
+            localStorage.setItem(
+              storageKey + '-archive',
+              JSON.stringify(scope),
+            );
+          } catch {
+            // The filters still work in this session.
+          }
+        }}
+        revision={archiveRevision}
+        selectedId={selected?.archive?.id}
+        onOpen={(row) => void openArchive(row)}
+        onRows={setArchiveRows}
+        disabled={archiveBusy || busy || !!reviewing}
+      />
+      {archiveMessage && <p role="status">{archiveMessage}</p>}
       <section className="admin-card">
-        <p>{t.intro}</p>
+        <p>
+          {archiveScope.clientId ? archiveText.archived : archiveText.temporary}
+        </p>
         <form className="form-grid" onSubmit={submit}>
           <label>
             {t.file(uploadLimits.fileMiB, uploadLimits.pages)}
@@ -582,7 +892,7 @@ export default function DocumentAi({
               accept=".pdf,.jpg,.jpeg,.png"
               multiple
               required
-              disabled={busy || !!reviewing}
+              disabled={archiveBusy || busy || !!reviewing}
             />
           </label>
           <label>
@@ -590,7 +900,7 @@ export default function DocumentAi({
             <select
               name="language"
               defaultValue="auto"
-              disabled={busy || !!reviewing}
+              disabled={archiveBusy || busy || !!reviewing}
             >
               <option value="auto">{t.mixed}</option>
               <option value="lv">Latviešu</option>
@@ -599,7 +909,10 @@ export default function DocumentAi({
             </select>
           </label>
           <div>
-            <button className="button small" disabled={busy || !!reviewing}>
+            <button
+              className="button small"
+              disabled={archiveBusy || busy || !!reviewing}
+            >
               {t.run}
             </button>
           </div>
@@ -634,7 +947,9 @@ export default function DocumentAi({
               <strong>{entry.file.name}</strong>
               <small>
                 {entry.status === 'ready'
-                  ? documentTypes[entry.type][locale]
+                  ? entry.archive?.status === 'CONFIRMED'
+                    ? archiveText.confirmed
+                    : documentTypes[entry.type][locale]
                   : entry.status === 'error'
                     ? t.failed
                     : entry.status === 'reading'
@@ -654,7 +969,7 @@ export default function DocumentAi({
               <button
                 type="button"
                 className="button secondary small"
-                disabled={busy || !!reviewing}
+                disabled={archiveBusy || busy || !!reviewing}
                 onClick={() => {
                   const index = entries.findIndex(
                     (item) => item.id === selected.id,
@@ -674,6 +989,19 @@ export default function DocumentAi({
             </div>
             {selected.status === 'error' && (
               <p role="alert">{errors[selected.error ?? ''] ?? t.failed}</p>
+            )}
+            {selected.archive && selected.error === 'EXACT_DUPLICATE' && (
+              <button
+                type="button"
+                className="button secondary small"
+                disabled={archiveBusy}
+                onClick={() => void openArchive(selected.archive!, true)}
+              >
+                {archiveText.reload}
+              </button>
+            )}
+            {selected.possibleDuplicate && (
+              <p role="status">{archiveText.possible}</p>
             )}
             {selected.status === 'reading' && <p role="status">{t.busy}</p>}
             {selected.status === 'queued' && <p role="status">{t.queued}</p>}
@@ -707,13 +1035,54 @@ export default function DocumentAi({
                     key={selected.id + ':' + page}
                     entry={selected}
                     number={page}
-                    region={training?.region}
+                    region={
+                      training?.region ??
+                      (highlight?.id === selected.id && highlight.page === page
+                        ? highlight.region
+                        : undefined)
+                    }
                     onRegion={
                       training
                         ? (region) => setMark({ ...training, region })
                         : undefined
                     }
                   />
+                  {selected.pages.length > 1 && (
+                    <form
+                      className="form-grid"
+                      key={selected.id + ':split:' + page}
+                      onSubmit={(event) => void split(selected, event)}
+                    >
+                      <label>
+                        {archiveText.first}
+                        <input
+                          type="number"
+                          min={1}
+                          max={selected.pages.length}
+                          defaultValue={page}
+                          name="start"
+                          required
+                        />
+                      </label>
+                      <label>
+                        {archiveText.last}
+                        <input
+                          type="number"
+                          min={1}
+                          max={selected.pages.length}
+                          defaultValue={page}
+                          name="end"
+                          required
+                        />
+                      </label>
+                      <button
+                        className="button secondary small"
+                        disabled={archiveBusy || busy || !!reviewing}
+                      >
+                        {archiveText.split}
+                      </button>
+                    </form>
+                  )}
                   {training && (
                     <DocumentTemplateTraining
                       key={
@@ -753,6 +1122,9 @@ export default function DocumentAi({
                     {t.kind}
                     <select
                       value={selected.type}
+                      disabled={
+                        selected.archive?.status === 'CONFIRMED' || archiveBusy
+                      }
                       onChange={(event) => {
                         const type = event.target.value as DocumentType;
                         update(selected.id, (item) => ({ ...item, type }));
@@ -772,6 +1144,7 @@ export default function DocumentAi({
                       <button
                         type="button"
                         className="button secondary small"
+                        disabled={selected.archive?.status === 'CONFIRMED'}
                         onClick={() =>
                           update(selected.id, (item) => ({
                             ...item,
@@ -787,6 +1160,7 @@ export default function DocumentAi({
                         <label key={key}>
                           <input
                             type="checkbox"
+                            disabled={selected.archive?.status === 'CONFIRMED'}
                             checked={keys.includes(key)}
                             onChange={(event) => {
                               const fields = event.target.checked
@@ -822,6 +1196,10 @@ export default function DocumentAi({
                           {fieldLabel(key, settings, locale)}
                           <input
                             value={selected.edits[key] ?? value.value}
+                            readOnly={
+                              selected.archive?.status === 'CONFIRMED' ||
+                              archiveBusy
+                            }
                             maxLength={180}
                             placeholder={t.missing}
                             onChange={(event) => edit(event.target.value)}
@@ -854,25 +1232,45 @@ export default function DocumentAi({
                             {t.uncertain}
                           </small>
                         )}
-                        {!edited && suggestion && (
-                          <div className="document-suggestion">
-                            <span>
-                              {templateValue ? template.from : t.suggestion} ·{' '}
-                              {suggestion}
-                            </span>
-                            <button
-                              type="button"
-                              className="button secondary small"
-                              onClick={() => edit(suggestion)}
-                            >
-                              {t.apply}
-                            </button>
-                          </div>
-                        )}
+                        {!edited &&
+                          suggestion &&
+                          selected.archive?.status !== 'CONFIRMED' && (
+                            <div className="document-suggestion">
+                              <span>
+                                {templateValue ? template.from : t.suggestion} ·{' '}
+                                {suggestion}
+                              </span>
+                              {templateValue && (
+                                <button
+                                  type="button"
+                                  className="button secondary small"
+                                  onClick={() => {
+                                    setMark(null);
+                                    setPage(templateValue.page);
+                                    setHighlight({
+                                      id: selected.id,
+                                      page: templateValue.page,
+                                      region: templateValue.region,
+                                    });
+                                  }}
+                                >
+                                  {archiveText.source}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="button secondary small"
+                                onClick={() => edit(suggestion)}
+                              >
+                                {t.apply}
+                              </button>
+                            </div>
+                          )}
                       </div>
                     );
                   })}
-                  {selected.reviewEnabled &&
+                  {selected.archive?.status !== 'CONFIRMED' &&
+                    selected.reviewEnabled &&
                     keys.some(
                       (key) =>
                         (values[key].page === page || !values[key].value) &&
@@ -884,7 +1282,7 @@ export default function DocumentAi({
                       <button
                         type="button"
                         className="button secondary small"
-                        disabled={busy || !!reviewing}
+                        disabled={archiveBusy || busy || !!reviewing}
                         onClick={() => void recheck(selected)}
                       >
                         {t.check}
@@ -901,6 +1299,38 @@ export default function DocumentAi({
                       value={currentPage.text || t.empty}
                     />
                   </label>
+                  {selected.archive?.status === 'PENDING' && (
+                    <div className="document-heading">
+                      <button
+                        type="button"
+                        className="button secondary small"
+                        disabled={archiveBusy || busy || !!reviewing}
+                        onClick={() => void saveReview(selected, false)}
+                      >
+                        {archiveText.draft}
+                      </button>
+                      <button
+                        type="button"
+                        className="button small"
+                        disabled={archiveBusy || busy || !!reviewing}
+                        onClick={() => void saveReview(selected, true)}
+                      >
+                        {archiveText.approve}
+                      </button>
+                      {archiveMessage === archiveText.conflict && (
+                        <button
+                          type="button"
+                          className="button secondary small"
+                          disabled={archiveBusy}
+                          onClick={() =>
+                            void openArchive(selected.archive!, true)
+                          }
+                        >
+                          {archiveText.reload}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <button
                     type="button"
                     className="button secondary small"

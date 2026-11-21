@@ -26,7 +26,7 @@ import {
 
 const execute = promisify(execFile);
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const active = new Set<'extract' | 'preview' | 'review' | 'teach'>();
+const active = new Set<'extract' | 'preview' | 'review' | 'teach' | 'split'>();
 
 export class DocumentOcrError extends Error {
   constructor(
@@ -113,10 +113,11 @@ async function runTool(
 
 async function withDocument<T>(
   request: Request,
-  action: 'extract' | 'preview' | 'review' | 'teach',
+  action: 'extract' | 'preview' | 'review' | 'teach' | 'split',
   limits: DocumentLimits,
   work: (document: {
     source: string;
+    bytes: Buffer;
     ext: string;
     run: (tool: string, args: string[]) => Promise<string>;
     pageImage: (page: number, size: string, gray: boolean) => Promise<string>;
@@ -152,7 +153,7 @@ async function withDocument<T>(
         ]);
         return prefix + '.png';
       };
-      const result = await work({ source, ext, run, pageImage });
+      const result = await work({ source, bytes, ext, run, pageImage });
       if (signal.aborted) throw new DocumentOcrError('TIMEOUT', 422);
       return result;
     } finally {
@@ -279,12 +280,13 @@ export async function extractDocument(
   language: DocumentLanguage,
   limits: DocumentLimits,
   templates: DocumentTemplate[] = [],
+  includeOriginal = false,
 ) {
   return withDocument(
     request,
     'extract',
     limits,
-    async ({ source, ext, run, pageImage }) => {
+    async ({ source, bytes, ext, run, pageImage }) => {
       const recognize = pageRecognizer(run, language);
       const layouts = new Map<number, DocumentLayout>();
       const count =
@@ -331,6 +333,17 @@ export async function extractDocument(
         pages,
         templateValues,
         templateReview: matching.map((rule) => rule.field),
+        original: includeOriginal
+          ? {
+              bytes,
+              mimeType:
+                ext === 'pdf'
+                  ? 'application/pdf'
+                  : ext === 'png'
+                    ? 'image/png'
+                    : 'image/jpeg',
+            }
+          : undefined,
       };
     },
   );
@@ -389,6 +402,47 @@ export async function learnDocumentTemplate(
             }
           : rule,
       };
+    },
+  );
+}
+
+export async function splitDocument(
+  request: Request,
+  start: number,
+  end: number,
+  limits: DocumentLimits,
+) {
+  return withDocument(
+    request,
+    'split',
+    limits,
+    async ({ source, ext, run }) => {
+      if (ext !== 'pdf') throw new DocumentOcrError('UNSUPPORTED_FILE', 415);
+      const count = await pdfPageCount(run, source, limits.pages);
+      if (
+        start < 1 ||
+        end < start ||
+        end > count ||
+        (start === 1 && end === count)
+      )
+        throw new DocumentOcrError('INVALID', 400);
+      const pattern = join(source, '..', 'part-%d.pdf');
+      const parts: string[] = [];
+      let temporaryBytes = 0;
+      for (let page = start; page <= end; page++) {
+        await run('pdfseparate', [...pageRange(page), source, pattern]);
+        const part = pattern.replace('%d', String(page));
+        temporaryBytes += (await stat(part)).size;
+        if (temporaryBytes > 64 * bytesPerMiB)
+          throw new DocumentOcrError('TOO_LARGE', 413);
+        parts.push(part);
+      }
+      const output = join(source, '..', 'split.pdf');
+      if (parts.length > 1) await run('pdfunite', [...parts, output]);
+      const file = parts.length > 1 ? output : parts[0];
+      if ((await stat(file)).size > limits.fileMiB * bytesPerMiB)
+        throw new DocumentOcrError('TOO_LARGE', 413);
+      return readFile(file);
     },
   );
 }

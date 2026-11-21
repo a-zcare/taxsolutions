@@ -12,6 +12,7 @@ import {
   extractDocument,
   renderDocumentPage,
   learnDocumentTemplate,
+  splitDocument,
 } from '@/lib/document-ocr';
 import {
   templateInputSchema,
@@ -21,6 +22,13 @@ import {
 import { documentTemplateHeader } from '@/lib/document-ai-regions';
 import { assertManager } from '@/lib/v2/policy';
 import { getDocumentLimits } from '@/lib/document-ai-limits';
+import {
+  archiveDocument,
+  archiveUploadSchema,
+  requireArchiveClient,
+} from '@/lib/document-archive';
+import { archiveUploadHeader } from '@/lib/document-archive-types';
+import { detectDocumentType } from '@/lib/document-ai-fields';
 import { failure } from '@/lib/http';
 import { rateLimit, requireActor, sameOrigin } from '@/lib/security';
 
@@ -59,16 +67,63 @@ export async function POST(request: Request) {
         return Response.json({ template, value: learned.value }, { headers });
       }
       await rateLimit('document-ai', 20, actor.id);
-      const result = await extractDocument(
+      const rawUpload = request.headers.get(archiveUploadHeader);
+      let upload;
+      if (rawUpload !== null) {
+        if (rawUpload.length > 4096) throw Error('INVALID');
+        let raw: unknown;
+        try {
+          raw = JSON.parse(Buffer.from(rawUpload, 'base64').toString('utf8'));
+        } catch {
+          throw Error('INVALID');
+        }
+        upload = archiveUploadSchema.parse(raw);
+        await requireArchiveClient(actor, upload.clientId);
+      }
+      const { original, ...result } = await extractDocument(
         request,
         language as DocumentLanguage,
         limits,
         await listDocumentTemplates(),
+        Boolean(upload),
       );
+      const archive =
+        upload && original
+          ? await archiveDocument(
+              actor,
+              upload,
+              original.bytes,
+              original.mimeType,
+              {
+                ...result,
+                language: language as DocumentLanguage,
+                type: detectDocumentType(result.pages),
+                edits: {},
+                values: {},
+              },
+            )
+          : undefined;
       return Response.json(
-        { ...result, reviewEnabled: reviewAvailable() },
+        { ...result, archive, reviewEnabled: reviewAvailable() },
         { headers },
       );
+    }
+    if (action === 'split') {
+      const start = Number(params.get('start'));
+      const end = Number(params.get('end'));
+      if (
+        !Number.isInteger(start) ||
+        !Number.isInteger(end) ||
+        start < 1 ||
+        end < start ||
+        end > limits.pages
+      )
+        throw Error('INVALID');
+      await rateLimit('document-ai-split', 30, actor.id);
+      const pdf = await splitDocument(request, start, end, limits);
+      return new Response(new Uint8Array(pdf), {
+        headers: { ...headers, 'Content-Type': 'application/pdf' },
+      });
     }
     const page = Number(params.get('page'));
     if (!Number.isInteger(page) || page < 1 || page > limits.pages)

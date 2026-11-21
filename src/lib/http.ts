@@ -35,8 +35,8 @@ export function failure(error: unknown) {
     { status, headers: { 'Cache-Control': 'no-store' } },
   );
 }
-export async function json(request: Request) {
-  if (Number(request.headers.get('content-length') ?? 0) > 16384)
+export async function json(request: Request, limit = 16384) {
+  if (Number(request.headers.get('content-length') ?? 0) > limit)
     throw Error('INVALID');
   const reader = request.body?.getReader();
   if (!reader) throw Error('INVALID');
@@ -46,7 +46,7 @@ export async function json(request: Request) {
     const part = await reader.read();
     if (part.done) break;
     size += part.value.length;
-    if (size > 16384) {
+    if (size > limit) {
       await reader.cancel();
       throw Error('INVALID');
     }

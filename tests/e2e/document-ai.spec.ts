@@ -235,3 +235,76 @@ test('Document AI saves a marked field and follows its label on the next invoice
   await page.getByRole('button', { name: 'Remove rule' }).click();
   await expect(page.getByText('No rules yet.')).toBeVisible();
 });
+
+test('Accounting archive restores drafts, confirms records and exports confirmed fields', async ({
+  page,
+}) => {
+  const { db } = await import('../../src/lib/db');
+  const suffix = crypto.randomUUID();
+  const clientName = 'Synthetic document archive ' + suffix.slice(0, 8);
+  await db.client.create({
+    data: { name: clientName, email: suffix + '@example.invalid', phone: '' },
+  });
+  await page.goto('/admin');
+  await page
+    .getByRole('combobox', { name: 'Language / Valoda / Язык' })
+    .selectOption('en');
+  await fillTestMfa(page);
+  await page.getByRole('button', { name: 'Sign in →' }).click();
+  await page.getByRole('button', { name: 'Document AI' }).click();
+  const queue = page.getByRole('region', { name: 'Client document queue' });
+  await queue.getByRole('textbox', { name: 'Find client' }).fill(clientName);
+  await queue.locator('select').first().selectOption({ label: clientName });
+  await queue.locator('input[type=month]').fill('2026-11');
+  const fixture = await page.context().newPage();
+  await fixture.setContent(
+    '<article><h1>Invoice</h1><p>Invoice no. 190</p><p>Supplier: Archive Demo</p><p>Amount due: 42.50 EUR</p></article>' +
+      '<article style="break-before:page"><h1>Invoice</h1><p>Invoice no. 191</p><p>Supplier: Archive Demo</p><p>Amount due: 83.17 EUR</p></article>',
+  );
+  const pdf = await fixture.pdf();
+  await fixture.close();
+  await page
+    .getByLabel(/Document \(up to/)
+    .setInputFiles({
+      name: 'monthly.pdf',
+      mimeType: 'application/pdf',
+      buffer: pdf,
+    });
+  await page.getByRole('button', { name: 'Extract text' }).click();
+  await expect(
+    queue.getByRole('button', { name: /monthly.pdf/ }),
+  ).toBeVisible();
+  const form = page.getByRole('region', { name: 'Preview' });
+  await form
+    .getByRole('textbox', { name: 'Document number', exact: true })
+    .fill('DRAFT-190');
+  await form.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Document AI' }).click();
+  await queue.getByRole('button', { name: /monthly.pdf/ }).click();
+  await expect(
+    form.getByRole('textbox', { name: 'Document number', exact: true }),
+  ).toHaveValue('DRAFT-190');
+
+  await form.getByRole('spinbutton', { name: 'From page' }).fill('2');
+  await form.getByRole('spinbutton', { name: 'To page' }).fill('2');
+  await form.getByRole('button', { name: 'Extract PDF pages' }).click();
+  await expect(
+    queue.getByRole('button', { name: /monthly-2-2.pdf/ }),
+  ).toBeVisible();
+  await queue.getByRole('button', { name: /monthly\.pdf/ }).click();
+  await form.getByRole('button', { name: 'Confirm and open next' }).click();
+  await expect(
+    form.getByRole('heading', { name: 'monthly-2-2.pdf' }),
+  ).toBeVisible();
+  const exportResponse = await page.request.get(
+    (await queue
+      .getByRole('link', { name: 'Export confirmed CSV' })
+      .getAttribute('href')) ?? '',
+  );
+  expect(exportResponse.status()).toBe(200);
+  const csv = await exportResponse.text();
+  expect(csv).toContain('"DRAFT-190"');
+  expect(csv).not.toContain('monthly-2-2.pdf');
+});
