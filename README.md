@@ -40,9 +40,13 @@ The legacy `compose.yaml` is for development. For production use **deploy/compos
 
 ## Document AI
 
-Sign in to `/workspace` and open **Document AI**. Select up to 20 PDF, PNG or JPEG files (10 MiB each, up to 12 pages per PDF). The file list, document preview and edited fields stay available while you navigate the workspace. Refreshing or signing out clears the files and edits. Field settings are saved per staff account in the current browser. Shared fields apply by default and each document type can override them. Staff can add custom fields, change a document type, override the fields for an individual file, correct values and export the corrected fields with the raw OCR text.
+Sign in to `/workspace` and open **Document AI**. Select up to 20 PDF, PNG or JPEG files (default 10 MiB each, up to 12 pages per PDF). The file list, document preview and edited fields stay available while you navigate the workspace. Refreshing or signing out clears the files and edits. Field settings are saved per staff account in the current browser. Shared fields apply by default and each document type can override them. Staff can add custom fields, change a document type, override the fields for an individual file, correct values and export the corrected fields with the raw OCR text.
 
 The Docker runtime includes Tesseract, Latvian, Russian and English language models, Poppler and `prlimit`. For native development on Debian or Ubuntu, install `poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-rus tesseract-ocr-eng util-linux`. The authenticated application reads embedded PDF text and uses local Tesseract on scans and images. Temporary files are removed after each operation. The application does not save OCR files or results to PostgreSQL or include them in application logs. GitHub Pages runs the public static demo.
+
+### Processing limits
+
+Owners and administrators can change the upload size, PDF page count and OCR timeout under **Document AI → Processing limits**. The server stores one shared setting for the workspace and applies it to new requests. Defaults are 10 MiB, 12 pages and 90 seconds. The supported ranges are 1–30 MiB, 1–50 pages and 15–300 seconds. The OCR timer starts after upload. The optional Ollama request has its own timeout.
 
 ### Optional local AI review
 

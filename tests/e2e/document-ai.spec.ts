@@ -22,6 +22,46 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
     page.getByRole('heading', { name: 'Document AI' }),
   ).toBeVisible();
 
+  const settingsPath = path + '/settings';
+  expect((await request.get(settingsPath)).status()).toBe(401);
+  await page.getByText('Processing limits', { exact: true }).click();
+  const fileMiB = page.getByRole('spinbutton', { name: 'File size (MiB)' });
+  const pages = page.getByRole('spinbutton', { name: 'PDF pages' });
+  const timeout = page.getByRole('spinbutton', { name: 'OCR time (seconds)' });
+  try {
+    await fileMiB.fill('1');
+    await pages.fill('1');
+    await timeout.fill('30');
+    await page.getByRole('button', { name: 'Save limits' }).click();
+    await expect(
+      page.getByText('Limits saved.', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel(/Document \(up to 1 MiB/)).toBeVisible();
+    expect(await (await page.request.get(settingsPath)).json()).toEqual({
+      fileMiB: 1,
+      pages: 1,
+      timeoutSeconds: 30,
+    });
+    const tooLarge = await page.request.post(path, {
+      headers,
+      data: Buffer.alloc(1024 * 1024 + 1),
+    });
+    expect(tooLarge.status()).toBe(413);
+  } finally {
+    const reset = await page.request.put(settingsPath, {
+      headers,
+      data: {
+        fileMiB: 10,
+        pages: 12,
+        timeoutSeconds: 90,
+      },
+    });
+    expect(reset.status()).toBe(200);
+  }
+  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('button', { name: 'Document AI', exact: true }).click();
+  await expect(page.getByLabel(/Document \(up to 10 MiB/)).toBeVisible();
+
   expect((await page.request.post(path, { data: 'test' })).status()).toBe(403);
   expect(
     (await page.request.post(path, { headers, data: 'test' })).status(),
@@ -93,11 +133,11 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
     page.getByRole('textbox', { name: 'Document number', exact: true }),
   ).toHaveValue('784');
 
+  const fieldSettings = page.locator('details').filter({
+    has: page.locator('summary').filter({ hasText: /^Field settings$/ }),
+  });
   await page.getByText('Field settings', { exact: true }).click();
-  await page
-    .getByLabel('Document type', { exact: true })
-    .first()
-    .selectOption('contract');
+  await fieldSettings.locator('select').selectOption('contract');
   await page.getByRole('checkbox', { name: 'Total amount' }).uncheck();
   await expect(page.getByRole('textbox', { name: 'Total amount' })).toHaveCount(
     0,

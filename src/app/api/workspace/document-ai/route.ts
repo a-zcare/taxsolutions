@@ -1,6 +1,5 @@
 import {
   documentLanguages,
-  maxDocumentPages,
   type DocumentLanguage,
 } from '@/lib/document-ai-options';
 import {
@@ -13,6 +12,7 @@ import {
   extractDocument,
   renderDocumentPage,
 } from '@/lib/document-ocr';
+import { getDocumentLimits } from '@/lib/document-ai-limits';
 import { failure } from '@/lib/http';
 import { rateLimit, requireActor, sameOrigin } from '@/lib/security';
 
@@ -25,6 +25,7 @@ export async function POST(request: Request) {
     const actor = await requireActor();
     const params = new URL(request.url).searchParams;
     const action = params.get('action') ?? 'extract';
+    const limits = await getDocumentLimits();
     if (action === 'extract') {
       const language = params.get('language') ?? 'auto';
       if (!Object.hasOwn(documentLanguages, language)) throw Error('INVALID');
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       const pages = await extractDocument(
         request,
         language as DocumentLanguage,
+        limits,
       );
       return Response.json(
         { pages, reviewEnabled: reviewAvailable() },
@@ -39,12 +41,12 @@ export async function POST(request: Request) {
       );
     }
     const page = Number(params.get('page'));
-    if (!Number.isInteger(page) || page < 1 || page > maxDocumentPages)
+    if (!Number.isInteger(page) || page < 1 || page > limits.pages)
       throw Error('INVALID');
 
     if (action === 'preview') {
       await rateLimit('document-ai-preview', 100, actor.id);
-      const image = await renderDocumentPage(request, page, action);
+      const image = await renderDocumentPage(request, page, action, limits);
       return new Response(new Uint8Array(image.bytes), {
         headers: { ...headers, 'Content-Type': image.type },
       });
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
       }
       await rateLimit('document-ai-review', 15, actor.id);
       const checked = reviewFields.parse(fields);
-      const image = await renderDocumentPage(request, page, action);
+      const image = await renderDocumentPage(request, page, action, limits);
       const values = await reviewDocumentImage(
         image.bytes,
         checked,

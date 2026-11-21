@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import {
   documentLanguages,
-  maxDocumentBytes,
-  maxDocumentPages,
+  bytesPerMiB,
+  type DocumentLimits,
   type DocumentLanguage,
   type DocumentPage,
 } from './document-ai-options';
@@ -24,7 +24,7 @@ export class DocumentOcrError extends Error {
   }
 }
 
-async function readDocument(request: Request) {
+async function readDocument(request: Request, maxDocumentBytes: number) {
   if (Number(request.headers.get('content-length')) > maxDocumentBytes)
     throw new DocumentOcrError('TOO_LARGE', 413);
   const reader = request.body?.getReader();
@@ -76,7 +76,6 @@ async function runTool(
             TMPDIR: directory,
           },
           signal,
-          timeout: 18000,
           killSignal: 'SIGKILL',
           maxBuffer: 1024 * 1024,
         },
@@ -102,6 +101,7 @@ async function runTool(
 async function withDocument<T>(
   request: Request,
   action: 'extract' | 'preview' | 'review',
+  limits: DocumentLimits,
   work: (document: {
     source: string;
     ext: string;
@@ -109,7 +109,7 @@ async function withDocument<T>(
     pageImage: (page: number, size: string, gray: boolean) => Promise<string>;
   }) => Promise<T>,
 ) {
-  const bytes = await readDocument(request);
+  const bytes = await readDocument(request, limits.fileMiB * bytesPerMiB);
   const ext = extension(bytes);
   if (active.has(action)) throw new DocumentOcrError('BUSY', 503);
   active.add(action);
@@ -120,7 +120,7 @@ async function withDocument<T>(
       await writeFile(source, bytes, { mode: 0o600 });
       const signal = AbortSignal.any([
         request.signal,
-        AbortSignal.timeout(90000),
+        AbortSignal.timeout(limits.timeoutSeconds * 1000),
       ]);
       const run = (tool: string, args: string[]) =>
         runTool(directory, tool, args, signal);
@@ -139,7 +139,9 @@ async function withDocument<T>(
         ]);
         return prefix + '.png';
       };
-      return await work({ source, ext, run, pageImage });
+      const result = await work({ source, ext, run, pageImage });
+      if (signal.aborted) throw new DocumentOcrError('TIMEOUT', 422);
+      return result;
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -170,13 +172,15 @@ export async function renderDocumentPage(
   request: Request,
   page: number,
   action: 'preview' | 'review',
+  limits: DocumentLimits,
 ) {
   return withDocument(
     request,
     action,
+    limits,
     async ({ ext, source, run, pageImage }) => {
       if (ext === 'pdf') {
-        const count = await pdfPageCount(run, source);
+        const count = await pdfPageCount(run, source, limits.pages);
         if (page > count) throw new DocumentOcrError('NOT_FOUND', 404);
       } else if (page !== 1) {
         throw new DocumentOcrError('NOT_FOUND', 404);
@@ -193,6 +197,7 @@ export async function renderDocumentPage(
 async function pdfPageCount(
   run: (tool: string, args: string[]) => Promise<string>,
   source: string,
+  maxDocumentPages: number,
 ) {
   const info = await run('pdfinfo', [source]);
   const count = Number(/^Pages:\s+(\d+)$/m.exec(info)?.[1]);
@@ -206,10 +211,12 @@ async function pdfPageCount(
 export async function extractDocument(
   request: Request,
   language: DocumentLanguage,
+  limits: DocumentLimits,
 ) {
   return withDocument(
     request,
     'extract',
+    limits,
     async ({ source, ext, run, pageImage }) => {
       let languagesChecked = false;
       const selected = documentLanguages[language];
@@ -257,7 +264,7 @@ export async function extractDocument(
       };
       if (ext !== 'pdf') return [await ocr(source, 1)];
 
-      const count = await pdfPageCount(run, source);
+      const count = await pdfPageCount(run, source, limits.pages);
       const pages: DocumentPage[] = [];
       for (let number = 1; number <= count; number++) {
         const embedded = (

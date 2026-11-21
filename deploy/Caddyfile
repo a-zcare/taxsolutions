@@ -5,7 +5,7 @@
   encode zstd gzip
   @documentOcr path /api/workspace/document-ai
   request_body @documentOcr {
-    max_size 10485760
+    max_size 31457280
   }
   @otherRequests not path /api/workspace/document-ai
   request_body @otherRequests {

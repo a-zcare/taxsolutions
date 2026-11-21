@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { maxDocumentBytes, type DocumentPage } from '@/lib/document-ai-options';
+import {
+  bytesPerMiB,
+  defaultDocumentLimits,
+  documentLimitRanges,
+  type DocumentLimits,
+  type DocumentPage,
+} from '@/lib/document-ai-options';
 import {
   availableFields,
   captureFields,
@@ -16,6 +22,9 @@ import {
 } from '@/lib/document-ai-fields';
 import { useAdminLanguage } from './AdminLanguage';
 import DocumentFieldSettings from './DocumentFieldSettings';
+import DocumentLimitSettings, {
+  documentSettingsEndpoint,
+} from './DocumentLimitSettings';
 import { documentAiCopy } from './document-ai-copy';
 
 type DocumentEntry = {
@@ -148,11 +157,20 @@ function DocumentPreview({
   );
 }
 
-export default function DocumentAi({ staffId }: { staffId: string }) {
+export default function DocumentAi({
+  staffId,
+  visible,
+  canManage,
+}: {
+  staffId: string;
+  visible: boolean;
+  canManage: boolean;
+}) {
   const { locale } = useAdminLanguage();
   const t = documentAiCopy[locale];
   const storageKey = 'taxsolutions-document-fields-' + staffId;
   const [settings, setSettings] = useState(defaultFieldSettings);
+  const [limits, setLimits] = useState<DocumentLimits | null>(null);
   const [entries, setEntries] = useState<DocumentEntry[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [page, setPage] = useState(1);
@@ -169,6 +187,19 @@ export default function DocumentAi({ staffId }: { staffId: string }) {
     return () => active.current?.abort();
   }, [storageKey]);
 
+  useEffect(() => {
+    if (!visible) return;
+    const controller = new AbortController();
+    void fetch(documentSettingsEndpoint, { signal: controller.signal })
+      .then(async (response) => {
+        if (response.ok && !controller.signal.aborted)
+          setLimits((await response.json()) as DocumentLimits);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [visible]);
+
+  const uploadLimits = limits ?? defaultDocumentLimits;
   const selected = entries.find((item) => item.id === selectedId);
   const selectedType = selected?.type;
   const selectedPages = selected?.pages;
@@ -277,7 +308,11 @@ export default function DocumentAi({ staffId }: { staffId: string }) {
       .getAll('document')
       .filter((file): file is File => file instanceof File && !!file.size);
     if (!files.length) return setError('UNSUPPORTED_FILE');
-    if (files.some((file) => file.size > maxDocumentBytes))
+    if (
+      files.some(
+        (file) => file.size > documentLimitRanges.fileMiB.max * bytesPerMiB,
+      )
+    )
       return setError('TOO_LARGE');
     if (entries.length + files.length > maxFiles) return setError('LIST_FULL');
 
@@ -391,7 +426,7 @@ export default function DocumentAi({ staffId }: { staffId: string }) {
         <p>{t.intro}</p>
         <form className="form-grid" onSubmit={submit}>
           <label>
-            {t.file}
+            {t.file(uploadLimits.fileMiB, uploadLimits.pages)}
             <input
               name="document"
               type="file"
@@ -426,6 +461,9 @@ export default function DocumentAi({ staffId }: { staffId: string }) {
           </p>
         )}
       </section>
+      {canManage && limits && (
+        <DocumentLimitSettings limits={limits} change={setLimits} />
+      )}
       <DocumentFieldSettings settings={settings} change={changeSettings} />
       <div className="document-layout">
         <section className="admin-card document-file-list" aria-label={t.files}>

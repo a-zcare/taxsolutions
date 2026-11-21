@@ -347,7 +347,11 @@ export default function Workspace({ actor }: { actor: Actor }) {
         </div>
       )}
       <div hidden={view !== 'document-ai'}>
-        <DocumentAi staffId={actor.id} />
+        <DocumentAi
+          staffId={actor.id}
+          visible={view === 'document-ai'}
+          canManage={privileged}
+        />
       </div>
       {settingsView.includes(view) && privileged && (
         <Admin key={view} embedded initialTab={view} />
