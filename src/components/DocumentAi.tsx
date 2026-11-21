@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { maxDocumentBytes, type DocumentPage } from '@/lib/document-ai-options';
 import {
+  availableFields,
   captureFields,
   defaultFieldSettings,
   detectDocumentType,
@@ -23,6 +24,7 @@ type DocumentEntry = {
   status: 'queued' | 'reading' | 'ready' | 'error';
   type: DocumentType;
   pages: DocumentPage[];
+  fields?: string[];
   edits: Record<string, string>;
   suggestions: Record<string, string>;
   error?: string;
@@ -67,6 +69,7 @@ function DocumentPreview({
   const [image, setImage] = useState('');
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [zoom, setZoom] = useState(100);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -102,32 +105,46 @@ function DocumentPreview({
   }, [entry.file, number, attempt]);
 
   return (
-    <div className="document-preview">
-      {image && !error && (
-        // eslint-disable-next-line @next/next/no-img-element -- Preview is a private, temporary browser blob.
-        <img
-          src={image}
-          alt={`${entry.file.name} · ${t.page} ${number}`}
-          onError={() => setError(true)}
+    <>
+      <label className="document-zoom">
+        {t.zoom} · {zoom}%
+        <input
+          type="range"
+          min={100}
+          max={250}
+          step={25}
+          value={zoom}
+          onChange={(event) => setZoom(Number(event.target.value))}
         />
-      )}
-      {error && (
-        <div role="alert">
-          <p>{t.previewError}</p>
-          <button
-            type="button"
-            className="button secondary small"
-            onClick={() => {
-              setError(false);
-              setImage('');
-              setAttempt((current) => current + 1);
-            }}
-          >
-            {t.retry}
-          </button>
-        </div>
-      )}
-    </div>
+      </label>
+      <div className="document-preview">
+        {image && !error && (
+          // eslint-disable-next-line @next/next/no-img-element -- Preview is a private, temporary browser blob.
+          <img
+            src={image}
+            style={{ width: zoom + '%', maxWidth: 'none' }}
+            alt={`${entry.file.name} · ${t.page} ${number}`}
+            onError={() => setError(true)}
+          />
+        )}
+        {error && (
+          <div role="alert">
+            <p>{t.previewError}</p>
+            <button
+              type="button"
+              className="button secondary small"
+              onClick={() => {
+                setError(false);
+                setImage('');
+                setAttempt((current) => current + 1);
+              }}
+            >
+              {t.retry}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -155,13 +172,16 @@ export default function DocumentAi({ staffId }: { staffId: string }) {
   const selected = entries.find((item) => item.id === selectedId);
   const selectedType = selected?.type;
   const selectedPages = selected?.pages;
+  const selectedFields = selected?.fields;
   const { keys, values } = useMemo(() => {
-    const keys = selectedType ? visibleFields(settings, selectedType) : [];
+    const keys =
+      selectedFields ??
+      (selectedType ? visibleFields(settings, selectedType) : []);
     return {
       keys,
       values: selectedPages ? captureFields(selectedPages, keys, settings) : {},
     };
-  }, [selectedType, selectedPages, settings]);
+  }, [selectedFields, selectedType, selectedPages, settings]);
   const currentPage = selected?.pages[page - 1];
 
   function changeSettings(next: FieldSettings) {
@@ -186,7 +206,7 @@ export default function DocumentAi({ staffId }: { staffId: string }) {
   ) {
     const fields = captureFields(
       entry.pages,
-      visibleFields(settings, entry.type),
+      entry.fields ?? visibleFields(settings, entry.type),
       settings,
     );
     const candidates = Object.entries(fields).filter(
@@ -517,6 +537,43 @@ export default function DocumentAi({ staffId }: { staffId: string }) {
                     </select>
                   </label>
                   <h3>{t.fields}</h3>
+                  <details className="document-settings">
+                    <summary>{t.fileFields}</summary>
+                    {selected.fields && (
+                      <button
+                        type="button"
+                        className="button secondary small"
+                        onClick={() =>
+                          update(selected.id, (item) => ({
+                            ...item,
+                            fields: undefined,
+                          }))
+                        }
+                      >
+                        {t.resetFile}
+                      </button>
+                    )}
+                    <div className="document-field-options">
+                      {availableFields(settings).map((key) => (
+                        <label key={key}>
+                          <input
+                            type="checkbox"
+                            checked={keys.includes(key)}
+                            onChange={(event) => {
+                              const fields = event.target.checked
+                                ? [...keys, key]
+                                : keys.filter((item) => item !== key);
+                              update(selected.id, (item) => ({
+                                ...item,
+                                fields,
+                              }));
+                            }}
+                          />
+                          {fieldLabel(key, settings, locale)}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
                   {keys.map((key) => {
                     const value = values[key];
                     const edited = Object.hasOwn(selected.edits, key);

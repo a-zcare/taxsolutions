@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     if (action === 'extract') {
       const language = params.get('language') ?? 'auto';
       if (!Object.hasOwn(documentLanguages, language)) throw Error('INVALID');
-      await rateLimit('document-ai', 15, actor.id);
+      await rateLimit('document-ai', 20, actor.id);
       const pages = await extractDocument(
         request,
         language as DocumentLanguage,

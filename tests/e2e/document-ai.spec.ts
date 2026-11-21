@@ -27,6 +27,30 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
     (await page.request.post(path, { headers, data: 'test' })).status(),
   ).toBe(415);
 
+  // Keep OCR and previews real. Stub only the optional local model boundary.
+  await page.route('**/api/workspace/document-ai?*', async (route) => {
+    const action = new URL(route.request().url()).searchParams.get('action');
+    if (action === 'preview') return route.continue();
+    if (action === 'review') {
+      const header = route.request().headers()['x-document-fields'];
+      const fields = JSON.parse(
+        Buffer.from(header, 'base64').toString('utf8'),
+      ) as { label: string }[];
+      return route.fulfill({
+        json: {
+          values: fields.map(({ label }) =>
+            label === 'Supplier' ? 'SIA Example' : null,
+          ),
+        },
+      });
+    }
+    const response = await route.fetch();
+    return route.fulfill({
+      response,
+      json: { ...(await response.json()), reviewEnabled: true },
+    });
+  });
+
   const imagePage = await page.context().newPage();
   await imagePage.setContent(
     '<main style="background:#fff;color:#000;font:36px Arial;padding:40px;width:640px">' +
@@ -53,6 +77,11 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
     page.getByRole('img', { name: 'invoice.png · Page 1' }),
   ).toBeVisible();
   await page.getByLabel('Document number', { exact: true }).fill('FIXED-100');
+  const supplier = page.getByRole('textbox', { name: 'Supplier' });
+  await expect(page.getByText('Ollama suggestion · SIA Example')).toBeVisible();
+  await expect(supplier).toHaveValue('');
+  await page.getByRole('button', { name: 'Use suggestion' }).click();
+  await expect(supplier).toHaveValue('SIA Example');
   await contract.click();
   await expect(contract).toHaveAttribute('aria-current', 'true');
   await expect(
@@ -78,6 +107,23 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
   await expect(page.getByLabel('Document number', { exact: true })).toHaveValue(
     'FIXED-100',
   );
+
+  await page.getByText('Field settings', { exact: true }).click();
+  await page.getByText('Fields for this file', { exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Total amount' }).uncheck();
+  await expect(page.getByRole('textbox', { name: 'Total amount' })).toHaveCount(
+    0,
+  );
+  await page
+    .getByRole('button', { name: 'Use document type settings' })
+    .click();
+  await expect(page.getByRole('textbox', { name: 'Total amount' })).toHaveValue(
+    '42 EUR',
+  );
+  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('button', { name: 'Document AI', exact: true }).click();
+  await expect(invoice).toHaveAttribute('aria-current', 'true');
+  await expect(supplier).toHaveValue('SIA Example');
 
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download text (.txt)' }).click();

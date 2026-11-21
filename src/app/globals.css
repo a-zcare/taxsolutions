@@ -2703,3 +2703,14 @@ body:has(.crm-layout) .admin-language {
     max-height: 15rem;
   }
 }
+
+.document-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.document-zoom input {
+  width: min(8rem, 50%);
+}

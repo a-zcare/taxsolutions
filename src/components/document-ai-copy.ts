@@ -1,5 +1,8 @@
 export const documentAiCopy = {
   lv: {
+    zoom: 'Tālummaiņa',
+    fileFields: 'Šī faila lauki',
+    resetFile: 'Izmantot veida iestatījumus',
     files: 'Faili',
     kind: 'Dokumenta veids',
     fields: 'Lauki',
@@ -46,6 +49,9 @@ export const documentAiCopy = {
       'Atpazīšana pārsniedza laika ierobežojumu. Sadaliet dokumentu mazākās daļās.',
   },
   en: {
+    zoom: 'Zoom',
+    fileFields: 'Fields for this file',
+    resetFile: 'Use document type settings',
     files: 'Files',
     kind: 'Document type',
     fields: 'Fields',
@@ -91,6 +97,9 @@ export const documentAiCopy = {
     timeout: 'Recognition timed out. Split the document into smaller parts.',
   },
   ru: {
+    zoom: 'Масштаб',
+    fileFields: 'Поля этого файла',
+    resetFile: 'Использовать настройки типа',
     files: 'Файлы',
     kind: 'Тип документа',
     fields: 'Поля',
