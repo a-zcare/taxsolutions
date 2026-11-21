@@ -30,6 +30,7 @@ const icons = {
   schedule: Settings2,
   contacts: Mail,
   content: FileText,
+  'document-ai': FileText,
   inquiries: Mail,
   staff: Users,
   faq: FileText,
@@ -91,6 +92,7 @@ export default function CrmShell({
         'bookings',
         'clients',
         'tasks',
+        'document-ai',
         'inquiries',
       ],
     },
@@ -162,7 +164,11 @@ export default function CrmShell({
               {group.keys.map((key) => {
                 const Icon = icons[key as keyof typeof icons] ?? PanelLeftClose;
                 const label =
-                  key === 'faq' ? 'FAQ' : key[0].toUpperCase() + key.slice(1);
+                  key === 'document-ai'
+                    ? 'Document AI'
+                    : key === 'faq'
+                      ? 'FAQ'
+                      : key[0].toUpperCase() + key.slice(1);
                 return (
                   <button
                     key={key}

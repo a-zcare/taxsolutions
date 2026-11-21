@@ -20,6 +20,13 @@ services:
     ports:
       - '127.0.0.1:1025:1025'
       - '127.0.0.1:8025:8025'
+  ollama:
+    image: ollama/ollama
+    profiles: [ai]
+    environment:
+      OLLAMA_NO_CLOUD: '1'
+    volumes:
+      - ollama_models:/root/.ollama
   migrate:
     image: taxsolutions:local
     build: .
@@ -66,3 +73,4 @@ services:
     restart: unless-stopped
 volumes:
   postgres_data:
+  ollama_models:

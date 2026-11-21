@@ -12,6 +12,9 @@ FROM base AS production-deps
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-fund --no-audit
 FROM base AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-eng tesseract-ocr-rus util-linux \
+    && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000
 RUN groupadd -g 10001 app && useradd -u 10001 -g app -M app
 COPY --from=production-deps /app/node_modules ./node_modules

@@ -13,6 +13,29 @@ function key() {
   if (key.length !== 32) throw Error('ENCRYPTION_KEY_REQUIRED');
   return key;
 }
+export function sealBytes(value: Uint8Array, context: string) {
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key(), nonce);
+  cipher.setAAD(Buffer.from(context));
+  const encrypted = Buffer.concat([cipher.update(value), cipher.final()]);
+  return Buffer.concat([
+    Buffer.from([1]),
+    nonce,
+    cipher.getAuthTag(),
+    encrypted,
+  ]);
+}
+export function unsealBytes(value: Uint8Array, context: string) {
+  if (value[0] !== 1 || value.length < 29) throw Error('INVALID_CIPHERTEXT');
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    key(),
+    value.subarray(1, 13),
+  );
+  decipher.setAAD(Buffer.from(context));
+  decipher.setAuthTag(value.subarray(13, 29));
+  return Buffer.concat([decipher.update(value.subarray(29)), decipher.final()]);
+}
 export function seal(value: string, context: string) {
   const nonce = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key(), nonce);

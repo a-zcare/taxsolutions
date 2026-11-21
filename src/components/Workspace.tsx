@@ -7,6 +7,7 @@ import { workspaceLabel } from '@/lib/v2/ui';
 import type { Actor } from '@/lib/v2/policy';
 import CrmShell from './CrmShell';
 import CrmCalendar from './CrmCalendar';
+import DocumentAi from './DocumentAi';
 import Admin from './Admin';
 import { ScheduleEditor } from './AdminEditors';
 import { defaultSchedule } from '@/lib/defaults';
@@ -45,9 +46,14 @@ export default function Workspace({ actor }: { actor: Actor }) {
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (
-        ['calendar', 'services', 'schedule', 'contacts', 'content'].includes(
-          view,
-        )
+        [
+          'calendar',
+          'document-ai',
+          'services',
+          'schedule',
+          'contacts',
+          'content',
+        ].includes(view)
       ) {
         setLoading(false);
         return;
@@ -289,33 +295,37 @@ export default function Workspace({ actor }: { actor: Actor }) {
           {t('WORKSPACE')} · {t(actor.role)}
         </p>
         <h1>
-          {settingsView.includes(view)
-            ? adminT(view)
-            : view === 'dashboard'
-              ? adminT('Business overview')
-              : t(
-                  view === 'dashboard'
-                    ? 'Business overview'
-                    : view === 'clients'
-                      ? 'Clients'
-                      : view === 'tasks'
-                        ? 'Tasks'
-                        : view === 'bookings'
-                          ? 'Bookings'
-                          : view === 'staff'
-                            ? 'Staff'
-                            : view === 'inquiries'
-                              ? 'Inquiries'
-                              : view === 'calendar'
-                                ? 'Calendar'
-                                : view === 'faq'
-                                  ? 'FAQ'
-                                  : view === 'audit'
-                                    ? 'Audit'
-                                    : 'Video',
-                )}
+          {view === 'document-ai'
+            ? 'Document AI'
+            : settingsView.includes(view)
+              ? adminT(view)
+              : view === 'dashboard'
+                ? adminT('Business overview')
+                : t(
+                    view === 'dashboard'
+                      ? 'Business overview'
+                      : view === 'clients'
+                        ? 'Clients'
+                        : view === 'tasks'
+                          ? 'Tasks'
+                          : view === 'bookings'
+                            ? 'Bookings'
+                            : view === 'staff'
+                              ? 'Staff'
+                              : view === 'inquiries'
+                                ? 'Inquiries'
+                                : view === 'calendar'
+                                  ? 'Calendar'
+                                  : view === 'faq'
+                                    ? 'FAQ'
+                                    : view === 'audit'
+                                      ? 'Audit'
+                                      : 'Video',
+                  )}
         </h1>
-        <p>{t('No financial documents or passport details.')}</p>
+        {view !== 'document-ai' && (
+          <p>{t('No financial documents or passport details.')}</p>
+        )}
       </div>
       <p role="status" className="workspace-message">
         {message}
@@ -336,6 +346,13 @@ export default function Workspace({ actor }: { actor: Actor }) {
           </button>
         </div>
       )}
+      <div hidden={view !== 'document-ai'}>
+        <DocumentAi
+          staffId={actor.id}
+          visible={view === 'document-ai'}
+          canManage={privileged}
+        />
+      </div>
       {settingsView.includes(view) && privileged && (
         <Admin key={view} embedded initialTab={view} />
       )}
