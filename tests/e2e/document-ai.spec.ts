@@ -76,7 +76,9 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
   await expect(
     page.getByRole('img', { name: 'invoice.png · Page 1' }),
   ).toBeVisible();
-  await page.getByLabel('Document number', { exact: true }).fill('FIXED-100');
+  await page
+    .getByRole('textbox', { name: 'Document number', exact: true })
+    .fill('FIXED-100');
   const supplier = page.getByRole('textbox', { name: 'Supplier' });
   await expect(page.getByText('Ollama suggestion · SIA Example')).toBeVisible();
   await expect(supplier).toHaveValue('');
@@ -87,9 +89,9 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
   await expect(
     page.getByRole('img', { name: 'contract.pdf · Page 1' }),
   ).toBeVisible();
-  await expect(page.getByLabel('Document number', { exact: true })).toHaveValue(
-    '784',
-  );
+  await expect(
+    page.getByRole('textbox', { name: 'Document number', exact: true }),
+  ).toHaveValue('784');
 
   await page.getByText('Field settings', { exact: true }).click();
   await page
@@ -104,9 +106,9 @@ test('Document AI protects uploads and recognizes a synthetic invoice', async ({
   await expect(page.getByRole('textbox', { name: 'Total amount' })).toHaveValue(
     '42 EUR',
   );
-  await expect(page.getByLabel('Document number', { exact: true })).toHaveValue(
-    'FIXED-100',
-  );
+  await expect(
+    page.getByRole('textbox', { name: 'Document number', exact: true }),
+  ).toHaveValue('FIXED-100');
 
   await page.getByText('Field settings', { exact: true }).click();
   await page.getByText('Fields for this file', { exact: true }).click();
