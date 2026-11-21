@@ -14,7 +14,7 @@ Evidence snapshot: feature work after CRM commit `1313146` and PWA commit `1849f
 | Privacy and cookies | Privacy center and cookie policy implemented | Source inspection and static checks; no optional tracking code found | No consent banner is needed while there are no optional technologies. Controller, processors, retention, legal grounds and data-subject request workflow require owner/privacy review and implementation |
 | Analytics | Not enabled | Repository inspection found no analytics/marketing scripts | Add only with privacy review and prior-consent gating if required |
 | Video meetings | Provider interfaces and mock lifecycle exist in PR #2 | Mock and failure/idempotency platform checks | Real OAuth providers require account credentials, consent scopes, review and operational testing |
-| Document upload/client portal | Not implemented | No route or storage facility exposed | Design and threat model before accepting client files or portal access |
+| Client document portal | Not implemented | Document AI accepts temporary files from authenticated staff for OCR | Design and threat model before accepting client submissions or persisting documents |
 | Backup/restore | Runbooks and local restore evidence documented | Isolated local restore test documented in `docs/v2/VALIDATION.md` | Off-host credentials, schedule, retention and recovery exercise remain staging work |
 | Docker/VPS production runtime | Prepared, not deployed | Container/runtime/Compose checks documented in V2 validation | Real EU VPS, TLS, firewall, monitoring and backups require owner provisioning/approval |
 

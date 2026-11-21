@@ -38,6 +38,12 @@ The contact form stores a CRM inquiry; email contains only its identifier and wo
 
 The legacy `compose.yaml` is for development. For production use **deploy/compose.production.yaml** and its runbook, which includes Caddy, separate database roles, no public DB port and controlled migrations. Do not use automatic destructive schema resets or `down -v` on customer data.
 
+## Document AI
+
+Sign in to `/workspace` and open **Document AI** to extract and download text from PDF, PNG or JPEG files up to 10 MiB. PDFs can contain up to 12 pages. The tool reads embedded text first and uses local Tesseract for pages without a text layer and for images. Choose Latvian, Russian, English or the combined model. Review accounting values against the original before using the extracted text.
+
+The Docker runtime includes Tesseract, all three language models, Poppler and `prlimit`. For development without the app container on Debian or Ubuntu, install `poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-rus tesseract-ocr-eng util-linux`. The OCR runs in the authenticated Next.js application. It is unavailable in the static GitHub Pages demo. Files stay in a private temporary directory for processing and are removed afterward. The app does not save files or OCR results to PostgreSQL, include them in application logs, or send them to a third-party service.
+
 ## Verification
 
 ```bash

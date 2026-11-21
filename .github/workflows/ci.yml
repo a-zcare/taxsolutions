@@ -62,6 +62,8 @@ jobs:
       - run: npm run build:worker && node --import tsx tests/worker-runtime.ts
       - name: Use preinstalled Chrome
         run: google-chrome --version
+      - name: Install local OCR tools
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-lav tesseract-ocr-eng tesseract-ocr-rus
       - run: npm run test:e2e
       - run: npm audit --omit=dev --audit-level=high
       - uses: actions/upload-artifact@v4
